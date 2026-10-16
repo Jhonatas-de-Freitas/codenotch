@@ -16,54 +16,64 @@ fn main() {
     let mut body = String::new();
     let _ = std::io::stdin().take(MAX_STDIN).read_to_string(&mut body);
 
-    let port = read_port();
+    let cfg_text = config_text().unwrap_or_default();
+    let port = port_from(&cfg_text);
+    let secret = secret_from(&cfg_text);
     let ppid = parent_pid();
 
-    if send(port, &event, ppid, &body).is_ok() {
+    if send(port, &event, ppid, &body, secret.as_deref()).is_ok() {
         return;
     }
     // Main app not running: launch it detached, then retry briefly
     spawn_main();
     for _ in 0..20 {
         std::thread::sleep(Duration::from_millis(100));
-        if send(port, &event, ppid, &body).is_ok() {
+        if send(port, &event, ppid, &body, secret.as_deref()).is_ok() {
             return;
         }
     }
     // Give up quietly — never affect Claude Code
 }
 
-/// Pulls "port": N out of %APPDATA%\codenotch\config.json (hand-rolled scan, no dependency)
-fn read_port() -> u16 {
-    let path = match std::env::var("APPDATA") {
-        Ok(a) => format!("{a}\\codenotch\\config.json"),
-        Err(_) => return DEFAULT_PORT,
-    };
-    let Ok(txt) = std::fs::read_to_string(path) else {
-        return DEFAULT_PORT;
-    };
-    if let Some(i) = txt.find("\"port\"") {
-        let digits: String = txt[i + 6..]
-            .chars()
-            .skip_while(|c| !c.is_ascii_digit())
-            .take_while(|c| c.is_ascii_digit())
-            .collect();
-        if let Ok(p) = digits.parse() {
-            return p;
-        }
-    }
-    DEFAULT_PORT
+/// %APPDATA%\codenotch\config.json, read once per run (hand-rolled scan below, no JSON dependency)
+fn config_text() -> Option<String> {
+    let path = format!("{}\\codenotch\\config.json", std::env::var("APPDATA").ok()?);
+    std::fs::read_to_string(path).ok()
 }
 
-fn send(port: u16, event: &str, ppid: u32, body: &str) -> std::io::Result<()> {
+/// Pulls "port": N out of the config text
+fn port_from(txt: &str) -> u16 {
+    let Some(i) = txt.find("\"port\"") else {
+        return DEFAULT_PORT;
+    };
+    let digits: String = txt[i + 6..]
+        .chars()
+        .skip_while(|c| !c.is_ascii_digit())
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
+    digits.parse().unwrap_or(DEFAULT_PORT)
+}
+
+/// Pulls "secret": "…" out of the config text — the value the server checks on every /event
+fn secret_from(txt: &str) -> Option<String> {
+    let key = "\"secret\"";
+    let after_key = &txt[txt.find(key)? + key.len()..];
+    let after_colon = &after_key[after_key.find(':')? + 1..];
+    let value = &after_colon[after_colon.find('"')? + 1..];
+    Some(value[..value.find('"')?].to_string())
+}
+
+fn send(port: u16, event: &str, ppid: u32, body: &str, secret: Option<&str>) -> std::io::Result<()> {
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
     let mut s = TcpStream::connect_timeout(&addr, Duration::from_millis(300))?;
     s.set_write_timeout(Some(Duration::from_millis(700)))?;
     s.set_read_timeout(Some(Duration::from_millis(700)))?;
+    let secret_header = secret.map(|v| format!("X-Codenotch-Secret: {v}\r\n")).unwrap_or_default();
     let req = format!(
-        "POST /event?e={}&ppid={} HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        "POST /event?e={}&ppid={} HTTP/1.1\r\nHost: 127.0.0.1\r\n{}Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
         event,
         ppid,
+        secret_header,
         body.len(),
         body
     );
@@ -137,4 +147,29 @@ fn parent_pid() -> u32 {
 #[cfg(not(windows))]
 fn parent_pid() -> u32 {
     std::os::unix::process::parent_id()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn port_from_finds_the_configured_value() {
+        assert_eq!(port_from("{\"port\": 12345}"), 12345);
+    }
+
+    #[test]
+    fn port_from_falls_back_to_default_without_a_port_key() {
+        assert_eq!(port_from("{}"), DEFAULT_PORT);
+    }
+
+    #[test]
+    fn secret_from_finds_the_configured_value() {
+        assert_eq!(secret_from("{\"port\":1,\"secret\":\"abc123\"}").as_deref(), Some("abc123"));
+    }
+
+    #[test]
+    fn secret_from_is_none_without_a_secret_key() {
+        assert_eq!(secret_from("{\"port\":1}"), None);
+    }
 }

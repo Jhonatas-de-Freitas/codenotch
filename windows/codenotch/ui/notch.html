@@ -37,7 +37,8 @@
   }
   .cell{display:flex;flex-direction:column;align-items:center;gap:6px}
   .ringwrap{position:relative;width:56px;height:56px}
-  .ringwrap > svg.ring{position:absolute;inset:0;overflow:visible} /* pins only the ring itself; an inline logo svg must not match this or it ends up in the top-left corner */
+  .ringwrap > svg.ring-bg,.ringwrap > svg.ring-fg{position:absolute;inset:0;overflow:visible} /* pins only the ring itself; an inline logo svg must not match this or it ends up in the top-left corner */
+  .ringwrap > svg.ring-fg{pointer-events:none} /* the track/arc paint on top of a full-bleed photo icon; clicks still fall through to the pill */
   .glyph{
     position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
     font-size:20px;font-weight:700;color:#e8e8ea;letter-spacing:-.5px;
@@ -47,11 +48,12 @@
   .glyph img,.glyph svg{display:block;pointer-events:none;user-select:none}
   .glyph .mark{display:block;width:26px;height:26px;color:#e8e8ea}
   .glyph .mark svg{width:26px;height:26px;fill:currentColor} /* inline SVG follows currentColor, so it dims together with the cell */
-  .glyph img.png{width:26px;height:26px;object-fit:contain}
+  .glyph img.png,.glyph img.gif{width:54px;height:54px;object-fit:cover;border-radius:50%} /* 1px shy of the 56px box so the circle never peeks past the ring's outer edge at r=27.5 */
   .glyph img.appicon{width:30px;height:30px;border-radius:8px;object-fit:cover}
   .c-head .mark{display:inline-block;width:16px;height:16px;color:#e8e8ea;margin-right:2px}
   .c-head .mark svg{width:16px;height:16px;fill:currentColor}
   .pct{font-size:15px;font-weight:600;color:#fff;font-variant-numeric:tabular-nums}
+  .pct-weekly{font-size:10px;color:#808080;font-variant-numeric:tabular-nums;margin-top:-2px}
   .dim{opacity:.55}
   /* Session arc animation */
   @keyframes spin{to{transform:rotate(360deg)}}
@@ -60,6 +62,8 @@
      compositor (other apps stutter). steps() drops repaints to ~10 fps; it still reads as spinning/breathing. */
   .arc-spin{animation:spin 1.2s steps(12) infinite;transform-origin:center}
   .arc-pulse{animation:pulse 1.1s steps(6) infinite}
+  /* Working = a real ring-of-fire GIF behind the glyph (see renderRing's bigFlame); it animates on
+     its own, so no CSS keyframes are needed here. */
   /* Windows' Animation effects switch: a still arc and a solid ring, as on the Mac under Reduce Motion */
   @media (prefers-reduced-motion: reduce){.arc-spin,.arc-pulse{animation:none}}
 
@@ -102,6 +106,38 @@
   .s-dot{width:6px;height:6px;border-radius:3px;flex:0 0 auto}
   .s-more{font-size:11px;color:#808080;padding:2px 0}
 
+  /* ---- System block: CPU, memory, disk and internet under (or after) the provider rings ----
+     A .cell of its own (data-p="system") so hover, the card tail, the hot rectangles, drag and click treat it
+     like a ring. Every width and height below is fixed on purpose: the numbers tick once a second and a
+     size that followed them would move the pill under the cursor. */
+  .sys{width:56px;gap:8px;align-items:stretch;padding-top:12px;border-top:1px solid #1e1e1e}
+  .sys[hidden]{display:none}
+  .sys.stale .sm{opacity:.45} /* the sampler idles while the notch is hidden: old numbers must not pass for live ones */
+  .sm{width:56px}
+  .sm-t{display:flex;justify-content:space-between;align-items:baseline;line-height:14px}
+  .sm-l{font-size:9px;font-weight:600;letter-spacing:.4px;color:#808080}
+  .sm-v{font-size:11px;font-weight:600;color:#fff;font-variant-numeric:tabular-nums}
+  .sm-b{height:3px;border-radius:2px;background:#2d2d2d;margin-top:3px;overflow:hidden}
+  .sm-b i{display:block;height:100%;width:0;border-radius:2px}
+  .sm-n{display:flex;align-items:baseline;gap:3px;height:14px;font-size:11px;font-weight:600;color:#fff;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden}
+  .sm-n i{font-style:normal;font-size:10px;font-weight:400;color:#808080}
+  .sm-net.off .sm-n{color:#808080;font-weight:400}
+  .sm-net.off i{display:none}
+  .sm-net.testing i{color:#00FF88} /* a speed test is running (the tray can start one with nothing else on screen): its traffic is what the numbers show */
+  /* Hover card */
+  .c-head .sysg{width:16px;height:16px;flex:none;color:#e8e8ea}
+  .w-val{font-size:12px;font-weight:600;color:#fff;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .dot{display:inline-block;width:6px;height:6px;border-radius:3px;margin-right:6px;vertical-align:1px}
+  .spark{display:block;width:100%;height:20px;margin-top:5px;border-bottom:1px solid #242424;overflow:visible}
+  .spark path{fill:none;stroke-width:1.2;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+  .spark .sp-l{stroke:currentColor}
+  .spark .sp-l2{stroke:#808080}
+  .spark .sp-a{fill:currentColor;stroke:none;opacity:.14}
+  .st-res{display:flex;justify-content:space-between;gap:8px;margin-top:4px;font-size:11px;color:#e8e8ea;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .w-used.err{color:#FF3F00;margin-top:4px}
+  .lnk{font-size:11px;color:#e8e8ea;text-decoration:underline;text-decoration-color:#555;text-underline-offset:2px;cursor:pointer;white-space:nowrap}
+  .lnk:hover{color:#fff;text-decoration-color:#fff}
+
   /* ---- The other three edges -------------------------------------------------
      The rules above draw the right-hand edge, the original layout and still the default. Each block
      below mirrors or rotates that one for another edge. Two things stay in JavaScript because they
@@ -140,6 +176,13 @@
     left:8px;right:auto;top:0;transform:none;margin-left:0;
     width:246px;max-height:calc(100% - 150px);
   }
+  /* The System block lies flat too: a 2 x 2 group after the rings, cut off by a vertical hairline. Two columns
+     rather than one row of four keep five rings plus the block inside the 720 px window. */
+  body[data-edge="top"] .sys:not([hidden]),body[data-edge="bottom"] .sys:not([hidden]){
+    display:grid;grid-template-columns:repeat(2,56px);gap:8px 12px;align-items:center;width:auto;
+    padding:0 0 0 14px;border-top:none;border-left:1px solid #1e1e1e;
+  }
+  body[data-edge="top"] .sys[data-n="1"],body[data-edge="bottom"] .sys[data-n="1"]{grid-template-columns:56px}
   body[data-edge="top"] #tail,body[data-edge="bottom"] #tail{right:auto;width:36px;height:32px}
   body[data-edge="top"] #tail{clip-path:path('M0 32C9 32 13.68 13.44 18 0C22.32 13.44 27 32 36 32Z')}
   body[data-edge="bottom"] #tail{clip-path:path('M0 0C9 0 13.68 18.56 18 32C22.32 18.56 27 0 36 0Z')}
@@ -149,7 +192,9 @@
 <div id="root">
   <div id="card"></div>
   <div id="tail"></div>
-  <div id="pill"></div><!-- one .cell per provider, stacked vertically (upstream: data-driven, the same layout for 1–5 cells) -->
+  <!-- one .cell per provider, stacked vertically (upstream: data-driven, the same layout for 1–5 cells), then #sys.
+       #sys is never rebuilt by renderRing: it only inserts and removes the provider cells in front of it. -->
+  <div id="pill"><div class="cell sys" id="sys" data-p="system" hidden></div></div>
   <div id="notice"></div>
 </div>
 <script>
@@ -198,6 +243,7 @@ function applyEdge(e){
   if(next===notchEdge) return;
   notchEdge=next;
   document.body.dataset.edge=next;
+  fitZoom(); // the design width follows the edge
   // The pill changes shape, so both the hot rectangles and the card's anchor have to be measured again
   if(card&&card.classList.contains('show')) placeCard();
   reportHot();
@@ -289,6 +335,45 @@ const TEXT={
     'needs your input':'等待你的输入',
     'Working in':'工作于',
   },
+  pt:{
+    'Included usage':'Uso incluído',
+    'API usage':'Uso de API',
+    'On demand':'Sob demanda',
+    'Usage':'Uso',
+    'Current session':'Sessão atual',
+    'Weekly (all models)':'Semanal (todos os modelos)',
+    'Weekly (Opus)':'Semanal (Opus)',
+    'Weekly (model-scoped)':'Semanal (por modelo)',
+    'Weekly limit':'Limite semanal',
+    'Weekly Limit':'Limite semanal',
+    '5-Hour Limit':'Limite de 5 horas',
+    '5-hour Limit':'Limite de 5 horas',
+    'Gemini Models':'Modelos Gemini',
+    'Claude and GPT models':'Modelos Claude e GPT',
+    'Monthly limit':'Limite mensal',
+    'Monthly Limit':'Limite mensal',
+    'Longer window':'Janela mais longa',
+    'Requests today · no limit published':'Solicitações hoje · sem limite publicado',
+    'Updated':'Atualizado',
+    'Resetting…':'Reiniciando…',
+    'Resets at':'Reinicia às',
+    'Resets':'Reinicia',
+    'Working':'Trabalhando',
+    'Waiting':'Aguardando',
+    'Streaming (network)':'Transmitindo (rede)',
+    'Rate limited, retrying in':'Limite atingido, tentando novamente em',
+    'Rate limited — retrying in':'Limite atingido — tentando novamente em',
+    'request today':'solicitação hoje',
+    'requests today':'solicitações hoje',
+    'no requests today':'nenhuma solicitação hoje',
+    'Waiting for first reading…':'Aguardando a primeira leitura…',
+    'Sign in to Claude Code to see usage.':'Faça login no Claude Code para ver o uso.',
+    'Sign in to Cursor to see usage.':'Faça login no Cursor para ver o uso.',
+    'Sign in to Codex to see usage.':'Faça login no Codex para ver o uso.',
+    'Sign in to Antigravity to see usage.':'Faça login no Antigravity para ver o uso.',
+    'needs your input':'precisa da sua resposta',
+    'Working in':'Trabalhando em',
+  },
 };
 // Kept as patterns rather than exact keys: each one carries a number, a plan name or an error
 // the provider wrote, so the whole string can never be a dictionary key.
@@ -369,6 +454,44 @@ const PATTERNS={
     [/Sign in to Cursor \(the editor\) to see usage\./g,'请登录 Cursor（编辑器）以查看用量。'],
     [/Cursor session was rejected — sign in again in the editor/g,'Cursor 会话被拒绝 — 请在编辑器中重新登录'],
   ],
+  pt:[
+    [/^(\d+)m limit$/,'Limite de $1 min'],
+    [/^(\d+)h limit$/,'Limite de $1 h'],
+    [/^(\d+)d limit$/,'Limite de $1 dias'],
+    [/^Rate limited, retrying in (\d+)s$/,'Limite atingido, tentando novamente em $1s'],
+    [/^Rate limited — retrying in (\d+)s$/,'Limite atingido — tentando novamente em $1s'],
+    [/^Unlimited on the (.+) plan — nothing to meter$/,'O plano $1 é ilimitado — nada para medir'],
+    [/^The (.+) plan has nothing for Cursor to meter yet$/,'O plano $1 ainda não tem nada para o Cursor medir'],
+    [/^(.+) · Google publishes no quota for this account$/,'$1 · o Google não publica cota para esta conta'],
+    [/^Live read failed \((.+)\)$/,'Falha na leitura ao vivo ($1)'],
+    [/Weekly \(all models\)/g,'Semanal (todos os modelos)'],
+    [/Weekly \(Opus\)/g,'Semanal (Opus)'],
+    [/Weekly \(model-scoped\)/g,'Semanal (por modelo)'],
+    [/Weekly limit/g,'Limite semanal'],
+    [/Monthly limit/g,'Limite mensal'],
+    [/\bWeekly\b/g,'Semanal'],
+    [/\bMonthly\b/g,'Mensal'],
+    [/ · via /g,' · via '],
+    [/needs your input/g,'precisa da sua resposta'],
+    [/^Working in /,'Trabalhando em '],
+    [/via Antigravity CLI/g,'via CLI do Antigravity'],
+    [/via Antigravity/g,'via Antigravity'],
+    [/via Google/g,'via Google'],
+    [/No Claude Code credential found/g,'Nenhuma credencial do Claude Code encontrada'],
+    [/Credential expired — run claude once in a terminal to renew it/g,'Credencial expirada — rode claude uma vez no terminal para renová-la'],
+    [/Credential rejected \(switched accounts\?\)/g,'Credencial rejeitada (trocou de conta?)'],
+    [/Codex sign-in expired — open Codex once to refresh it/g,'Login do Codex expirou — abra o Codex uma vez para renová-lo'],
+    [/Codex rejected its sign-in — sign in to Codex again/g,'O Codex rejeitou o login — faça login no Codex novamente'],
+    [/Codex reported no usage windows/g,'O Codex não reportou janelas de uso'],
+    [/Codex has not recorded a usage snapshot yet/g,'O Codex ainda não registrou uma leitura de uso'],
+    [/from last Codex run/g,'da última execução do Codex'],
+    [/Waiting for Antigravity CLI quota/g,'Aguardando a cota da CLI do Antigravity'],
+    [/Open Antigravity to read its quota/g,'Abra o Antigravity para ler a cota'],
+    [/Antigravity's Google session was rejected — sign in again in Antigravity/g,'A sessão do Google no Antigravity foi rejeitada — faça login novamente no Antigravity'],
+    [/Antigravity is closed — last reading kept/g,'Antigravity está fechado — mantendo a última leitura'],
+    [/Sign in to Cursor \(the editor\) to see usage\./g,'Faça login no Cursor (o editor) para ver o uso.'],
+    [/Cursor session was rejected — sign in again in the editor/g,'A sessão do Cursor foi rejeitada — faça login novamente no editor'],
+  ],
 };
 // Grammar differs enough that a format string would not carry it — Russian puts the verb last,
 // Chinese puts it after the time — so each language writes its own short functions.
@@ -385,6 +508,10 @@ const UI={
       resetsAt:t=>`${t} 重置`,resetsOn:(d,t)=>`${d} ${t} 重置`,resetsDate:d=>`${d} 重置`,
       ago:m=>m<60?`${m} 分钟前`:`${Math.round(m/60)} 小时前`,
       usedLeft:(used,left)=>`已用 ${used}% · 剩余 ${left}%`,andMore:n=>`另有 ${n} 个`},
+  pt:{locale:'pt-BR',title:n=>'Uso do '+n,resetting:'Reiniciando…',resetsIn:m=>`Reinicia em ${m} min`,
+      resetsAt:t=>`Reinicia às ${t}`,resetsOn:(d,t)=>`Reinicia ${d} às ${t}`,resetsDate:d=>`Reinicia em ${d}`,
+      ago:m=>m<60?`há ${m} min`:`há ${Math.round(m/60)} h`,
+      usedLeft:(used,left)=>`${used}% usado · ${left}% restante`,andMore:n=>`e mais ${n}`},
 };
 function ui(){return UI[uiLang]||UI.en;}
 function textCopy(value){
@@ -401,6 +528,7 @@ function setUiLanguage(lang){
   if(uiLang===next) return;
   uiLang=next;
   renderRing();
+  updateSysPill();
   if(card&&card.classList.contains('show')) renderCard();
 }
 // "Is it working?" per provider: Claude from the four-state engine, the others from the activity probe. Returns running | attention | idle
@@ -497,37 +625,49 @@ function renderRing(){
   // Rebuild the DOM only when the structure changes (never swap the element under the cursor)
   const want=ps.map(p=>p.id+':'+(glyphs[p.id]?glyphs[p.id].kind:'-')).join(',');
   if(pill.dataset.cells!==want){
-    pill.innerHTML=ps.map(p=>`<div class="cell" data-p="${p.id}">
-      <div class="ringwrap"><svg class="ring" viewBox="0 0 56 56"></svg><div class="glyph ${(!glyphs[p.id]&&p.glyph.length>1)?'small':''}">${glyphHtml(p)}</div></div>
-      <div class="pct">—</div></div>`).join('');
+    // The System block (#sys) stays put; only the provider cells in front of it are swapped
+    for(const old of pill.querySelectorAll('.cell:not(.sys)')) old.remove();
+    sysEl.insertAdjacentHTML('beforebegin',ps.map(p=>`<div class="cell" data-p="${p.id}">
+      <div class="ringwrap"><svg class="ring-bg" viewBox="0 0 56 56"></svg><div class="glyph ${(!glyphs[p.id]&&p.glyph.length>1)?'small':''}">${glyphHtml(p)}</div><svg class="ring-fg" viewBox="0 0 56 56"></svg></div>
+      <div class="pct">—</div><div class="pct-weekly"></div></div>`).join(''));
     pill.dataset.cells=want;
   }
   for(const p of ps){
     const cell=pill.querySelector(`.cell[data-p="${p.id}"]`); if(!cell) continue;
-    const svg=cell.querySelector('svg.ring'), pct=cell.querySelector('.pct'), glyph=cell.querySelector('.glyph'), wrap=cell.querySelector('.ringwrap');
+    const bg=cell.querySelector('svg.ring-bg'), fg=cell.querySelector('svg.ring-fg'), pct=cell.querySelector('.pct'), pctWeekly=cell.querySelector('.pct-weekly'), glyph=cell.querySelector('.glyph'), wrap=cell.querySelector('.ringwrap');
     const h=headlineOf(p.snap,p.id);
-    let inner=`<circle cx="28" cy="28" r="22" fill="#2a2a2a"/><circle cx="28" cy="28" r="25" fill="none" stroke="${TRACK}" stroke-width="5"/>`;
+    // Backdrop disc stays behind the glyph (fills the gap around a small SVG mark); the track, the
+    // progress arc and the working indicator are drawn in ring-fg, in front of the glyph, so a
+    // full-bleed photo/gif icon still shows them as a rim instead of being covered by it.
+    const ws=workState(p.id);
+    // A real ring-of-fire GIF sits BEHIND the glyph, centred on the ring and sized past the photo's
+    // edge so its flame shows all the way around; the photo covers the GIF's own black hole.
+    const bigFlame=ws==='running' ? `<image href="fire-ring.gif" x="-11" y="-11" width="78" height="78"/>` : '';
+    bg.innerHTML=`<circle cx="28" cy="28" r="22" fill="#2a2a2a"/>${bigFlame}`;
+    let inner=`<circle cx="28" cy="28" r="25" fill="none" stroke="${TRACK}" stroke-width="5"/>`;
     if(h && h.count==null) inner+=svgArc(25,Math.min(h.used,1),tone(h.used),5);
     if(weeklyRing!=='off'){ // the week, thinner and at its own radius, in its own colour: a session at 12% beside a week at 91% is the case this exists for
       const wk=weeklyOf(p.snap,p.id);
       // Inside, it shares the gap with the working indicator, so it stands down while that is showing
-      const taken=weeklyRing==='inside'&&workState(p.id)!=='idle';
+      const taken=weeklyRing==='inside'&&ws!=='idle';
       if(wk&&(!h||wk.id!==h.id)&&!taken){
         const r=weeklyRing==='inside'?16:31;
         inner+=`<circle cx="28" cy="28" r="${r}" fill="none" stroke="${TRACK}" stroke-width="2.4" opacity="0.7"/>`
           +svgArc(r,Math.min(wk.used,1),tone(wk.used),2.4,'opacity="0.85"');
       }
     }
-    { // thin inner arc: spinning white = working, yellow pulse = waiting on you (one animation for all four, different sources)
-      const ws=workState(p.id);
-      if(ws==='running') inner+=`<g class="arc-spin">${svgArc(19,0.28,INK,2.5)}</g>`;
-      else if(ws==='attention') inner+=`<g class="arc-pulse"><circle cx="28" cy="28" r="19" fill="none" stroke="${WATCH}" stroke-width="2.5"/></g>`;
+    { // thin inner arc: the big flame in ring-bg already says "working"; only "waiting on you" still needs a mark here
+      if(ws==='attention') inner+=`<g class="arc-pulse"><circle cx="28" cy="28" r="19" fill="none" stroke="${WATCH}" stroke-width="2.5"/></g>`;
     }
-    svg.innerHTML=inner;
+    fg.innerHTML=inner;
     if(p.snap.status==='needsAuth'||p.snap.status==='none') pct.textContent='—';
     else if(h && h.count!=null) pct.textContent='~'+h.count;
     else if(h) pct.textContent=(h.derived?'~':'')+pctText(h.used)+'%';
     else pct.textContent=p.snap.windows.length?'—':'…'; // its declared window is missing: a dash, not a wait
+    // Second line under the headline number: the same provider's weekly reading, so a full session
+    // (or five-hour window) at a glance does not hide a week that is quietly running out.
+    const wk=weeklyOf(p.snap,p.id);
+    pctWeekly.textContent=(wk && wk.count==null) ? (wk.derived?'~':'')+pctText(wk.used)+'%' : '';
     glyph.classList.toggle('dim', !!(h && h.used>=1));
     wrap.classList.toggle('dim', staleOf(p.snap));
   }
@@ -566,6 +706,10 @@ function moreRow(n){ return n>0?`<div class="s-more">${ui().andMore(n)}</div>`:'
 let hoverId='claude';
 function renderCard(){
   const c=document.getElementById('card');
+  if(hoverId==='system'){
+    if(sysMetrics.length){ renderSysCard(); placeCard(); noteCardSize(); return; }
+    hoverId=providers()[0].id; // the block was switched off while it was hovered
+  }
   const p=providers().find(x=>x.id===hoverId)||providers()[0];
   const snap=p.snap;
   const headIcon=glyphHtml(p,true);
@@ -621,29 +765,33 @@ function renderCard(){
     }
   }
   c.innerHTML=html;
+  sysSig=''; // the System card's cached nodes are gone
   placeCard();
 }
 // The card follows the hovered cell: centred on it along the pill (kept inside the window), tail pointing at it.
 // On the upright edges that means matching its vertical centre; on the flat ones, its horizontal centre,
 // and the card is pushed clear of a pill whose thickness follows the cells it holds.
 function placeCard(){
+  // With fitZoom active a rectangle comes back in zoomed pixels while style.top/left are set in unzoomed ones
+  const k=parseFloat(document.documentElement.style.zoom)||1;
+  const box=el=>{ const r=el.getBoundingClientRect(); return {left:r.left/k,top:r.top/k,right:r.right/k,bottom:r.bottom/k,width:r.width/k,height:r.height/k}; };
   const cell=pill.querySelector(`.cell[data-p="${hoverId}"]`)||pill;
-  const cr=cell.getBoundingClientRect();
+  const cr=box(cell);
   // The point sits on the ring, not the cell, which includes the label below it
-  const rr=(cell.querySelector('.ringwrap')||cell).getBoundingClientRect();
+  const rr=box(cell.querySelector('.ringwrap')||cell);
   card.style.transform='none';
   if(edgeIsVertical()){
     const cy=cr.top+cr.height/2;
-    const H=innerHeight, ch=card.offsetHeight||0;
+    const H=innerHeight/k, ch=card.offsetHeight||0;
     let top=Math.round(cy-ch/2); top=Math.max(8,Math.min(top,H-ch-8));
     card.style.top=top+'px'; card.style.left='';
     const ry=rr.top+rr.height/2;
     const th=tail.offsetHeight||36, ty=Math.max(top+16+th/2,Math.min(top+ch-16-th/2,ry));
     tail.style.top=Math.round(ty-th/2)+'px'; tail.style.left='';
   }else{
-    const pr=pill.getBoundingClientRect();
+    const pr=box(pill);
     const cx=cr.left+cr.width/2;
-    const W=innerWidth, cw=card.offsetWidth||0, ch=card.offsetHeight||0;
+    const W=innerWidth/k, cw=card.offsetWidth||0, ch=card.offsetHeight||0;
     let left=Math.round(cx-cw/2); left=Math.max(8,Math.min(left,W-cw-8));
     card.style.left=left+'px';
     const rx=rr.left+rr.width/2;
@@ -671,6 +819,399 @@ function refreshClock(){
 }
 function hideCard(){card.classList.remove('show');reportHot();}
 function scheduleHide(){clearTimeout(hideTimer);hideTimer=setTimeout(hideCard,250);}
+/* ===== System block: processor, memory, disk and internet =====
+   The pill part lives in #sys, which renderRing never rebuilds, and is patched in place once a second: swapping
+   nodes under the cursor is what the ring code avoids too. The card is the same: its markup holds no numbers, so it
+   is only rewritten when its shape changes (a section appears, the test starts) and the values are written into
+   fixed slots (data-k), which keeps the hover, the "Test now" link and the layout still between ticks.
+   Nothing animates: the window is transparent and always on top, and a repaint loop taxes the whole desktop. */
+const SYS_IDS=['cpu','ram','disk','net'];
+const SYS_HISTORY=60; // seconds of sparkline
+const SYS_DRIVE_ROWS=2; // other drives listed on the card
+// The speed test writes its errors in English (speedtest.rs), and they are few and fixed: a Portuguese card would otherwise
+// show half a sentence in English. Same table in settings.html.
+const PT_SPEED_ERRORS=[
+  [/^No connection to (.+)$/,'Sem conexão com $1'],
+  [/^Connection to (.+) timed out$/,'A conexão com $1 expirou'],
+  [/^Connection to (.+) was interrupted$/,'A conexão com $1 foi interrompida'],
+  [/^(.+) answered HTTP (\d+)$/,'$1 respondeu com HTTP $2'],
+  [/^Network error talking to (.+) \((.+)\)$/,'Erro de rede ao acessar $1 ($2)'],
+  [/^Speed test took too long$/,'O teste demorou demais'],
+  [/^Speed test failed unexpectedly$/,'O teste falhou de forma inesperada'],
+  [/^No (download|upload) data received$/,'Nenhum dado de $1 recebido'],
+  [/^[Ll]atency measurement failed$/,'Não foi possível medir a latência'], // speedtest.rs capitalises this one only
+  [/^(download|upload) measurement failed$/,'Não foi possível medir o $1'],
+];
+// Only these two languages are written out; every other one shows English, as the settings page does
+const SYS={
+  en:{title:'System',cpu:'Processor',ram:'Memory',disk:'Disk',net:'Internet',
+      threads:n=>`${n} threads`,usedOf:(a,b)=>`${a} of ${b}`,free:x=>`${x} free`,
+      active:p=>`Active ${p}%`,read:x=>`Read ${x}`,write:x=>`Write ${x}`,
+      down:'Download',up:'Upload',offline:'No network connection',pillOffline:'offline',
+      speed:'Speed test',testNow:'Test now',never:'Never run',justNow:'just now',
+      phase:{latency:'Measuring latency…',download:'Testing download…',upload:'Testing upload…',_:'Testing…'},
+      failed:m=>`Test failed: ${m}`,speedErr:m=>m},
+  pt:{title:'Sistema',cpu:'Processador',ram:'Memória',disk:'Disco',net:'Internet',
+      threads:n=>`${n} threads`,usedOf:(a,b)=>`${a} de ${b}`,free:x=>`${x} livres`,
+      active:p=>`Ativo ${p}%`,read:x=>`Leitura ${x}`,write:x=>`Escrita ${x}`,
+      down:'Download',up:'Upload',offline:'Sem conexão de rede',pillOffline:'sem rede',
+      speed:'Teste de velocidade',testNow:'Testar agora',never:'Nunca executado',justNow:'agora há pouco',
+      phase:{latency:'Medindo a latência…',download:'Testando o download…',upload:'Testando o upload…',_:'Testando…'},
+      failed:m=>`Falha no teste: ${m}`,speedErr:m=>PT_SPEED_ERRORS.reduce((t,[re,to])=>t.replace(re,to),m)},
+};
+function sysText(k,...a){
+  const t=SYS[uiLang]&&SYS[uiLang][k]!==undefined?SYS[uiLang]:SYS.en;
+  return typeof t[k]==='function'?t[k](...a):t[k];
+}
+const sysEl=document.getElementById('sys');
+let sysMetrics=[]; // empty until Rust answers, so a build without the sampler shows no block instead of dashes for ever
+let sysSnap={cpu:null,ram:null,disk:null,net:null};
+let sysAt=0; // when the last live sample arrived, by this page's clock
+let speedSnap=null; // null = no answer yet (or a build without the speed test): the card then omits that part
+let sysHist=[], sysHistAt=0; // last SYS_HISTORY samples, oldest first; null = a gap where the sampler idled
+let sysRefs={}; // the pill's nodes, by metric
+let sysSig='', sysEls={}; // the card's markup as last written, and its slots
+let cardSize=''; // the card's size when the hot rectangles were last reported
+
+// ---- Payloads: whatever arrives is checked field by field, and a bad field reads as "no data" ----
+const isObj=v=>v&&typeof v==='object'&&!Array.isArray(v);
+const numOrNull=v=>typeof v==='number'&&isFinite(v)&&v>=0?v:null;
+const fracOrNull=v=>typeof v==='number'&&isFinite(v)?Math.min(1,Math.max(0,v)):null;
+const strOr=(v,d='')=>typeof v==='string'?v:d;
+function normSys(p){
+  if(!isObj(p)) return null;
+  const {cpu,ram,disk,net}=p;
+  return {
+    cpu: isObj(cpu)&&fracOrNull(cpu.frac)!=null ? {frac:fracOrNull(cpu.frac),name:strOr(cpu.name),threads:numOrNull(cpu.threads)} : null,
+    ram: isObj(ram)&&fracOrNull(ram.frac)!=null ? {frac:fracOrNull(ram.frac),used:numOrNull(ram.used),total:numOrNull(ram.total)} : null,
+    disk: isObj(disk)&&fracOrNull(disk.frac)!=null ? {
+      drive:strOr(disk.drive),kind:strOr(disk.kind),frac:fracOrNull(disk.frac),used:numOrNull(disk.used),total:numOrNull(disk.total),
+      busy:fracOrNull(disk.busy),read:numOrNull(disk.read_bytes_s),write:numOrNull(disk.write_bytes_s),
+      others:(Array.isArray(disk.others)?disk.others:[]).filter(o=>isObj(o)&&fracOrNull(o.frac)!=null).slice(0,4)
+        .map(o=>({drive:strOr(o.drive),frac:fracOrNull(o.frac),used:numOrNull(o.used),total:numOrNull(o.total)})),
+    } : null,
+    net: isObj(net) ? {connected:net.connected===true,kind:strOr(net.kind),name:strOr(net.name),
+      down:numOrNull(net.down_bytes_s),up:numOrNull(net.up_bytes_s),link:numOrNull(net.link_bits_s)} : null,
+  };
+}
+function normSpeed(p){
+  if(!isObj(p)) return null;
+  const last=isObj(p.last)&&numOrNull(p.last.down_bits_s)!=null&&numOrNull(p.last.up_bits_s)!=null&&numOrNull(p.last.at)!=null
+    ? {at:p.last.at,down:p.last.down_bits_s,up:p.last.up_bits_s,ms:numOrNull(p.last.latency_ms)} : null;
+  return {
+    state:['idle','running','done','error'].includes(p.state)?p.state:'idle',phase:strOr(p.phase),
+    progress:fracOrNull(p.progress)||0,live:numOrNull(p.live_bits_s),ms:numOrNull(p.latency_ms),
+    down:numOrNull(p.down_bits_s),up:numOrNull(p.up_bits_s),last,error:typeof p.error==='string'&&p.error?p.error:null,
+  };
+}
+
+// ---- Numbers, in the language's own decimal mark ----
+const nfCache={};
+function nf(v,max,min=max){
+  const loc=ui().locale, k=loc+max+min;
+  try{ return (nfCache[k]||(nfCache[k]=new Intl.NumberFormat(loc,{minimumFractionDigits:min,maximumFractionDigits:max}))).format(v); }
+  catch(e){ return v.toFixed(max); }
+}
+const sig3=v=>v===0?nf(0,0):nf(v,v>=100?0:v>=10?1:2); // an exact zero is "0", not "0,00"
+function bitsRate(bits){ // "84,3 Mb/s"
+  let v=bits/1e3, u=0; const U=['Kb/s','Mb/s','Gb/s'];
+  while(v>=999.5&&u<2){ v/=1000; u++; }
+  return sig3(v)+' '+U[u];
+}
+function linkSpeed(bits){ // "1,2 Gb/s", "867 Mb/s": a nominal figure, so no trailing zeros
+  let v=bits/1e6, u=0; const U=['Mb/s','Gb/s'];
+  if(v>=999.5){ v/=1000; u=1; }
+  return nf(v,v>=100?0:1,0)+' '+U[u];
+}
+function bitsCompact(bytesPerS){ // the pill's ~56 px: "84 M", "1,2 M"
+  let v=bytesPerS*8/1e3, u=0; const U=['K','M','G'];
+  for(;;){
+    const r=v>=10?Math.round(v):Math.round(v*10)/10;
+    if(r>=1000&&u<2){ v/=1000; u++; continue; }
+    return nf(r,Number.isInteger(r)?0:1)+' '+U[u];
+  }
+}
+const byteRate=b=>{ const v=b/1e6; return nf(v,v>=10?0:1,0)+' MB/s'; };
+function fmtSize(b){
+  const U=['B','KB','MB','GB','TB']; let v=b, i=0;
+  while(v>=1024&&i<4){ v/=1024; i++; }
+  return nf(v,i>=4?2:(i>=3&&v<100)?1:0)+' '+U[i];
+}
+const pctInt=f=>Math.round(f*100)+'%';
+function agoText(ms){ // the last test is kept across restarts, so it can be days old, and "300h ago" says nothing
+  const m=Math.floor((Date.now()-ms)/60000);
+  if(m>=2880) return new Date(ms).toLocaleDateString(ui().locale,{month:'short',day:'numeric'});
+  // ui().ago rounds hours to the nearest, so 1 h 40 min read "2 h"; the settings page counts whole hours, and both must give the same age
+  return m<1?sysText('justNow'):ui().ago(m<60?m:Math.floor(m/60)*60);
+}
+const cpuName=n=>n.replace(/\((R|TM)\)/g,'').replace(/\s+/g,' ').trim(); // "13th Gen Intel(R) Core(TM) i7" reads as noise
+const diskWord=d=>d&&d.kind==='ssd'?'SSD':d&&d.kind==='hdd'?'HDD':'DISK';
+
+// ---- History and sparklines ----
+function pushHist(s){
+  const now=Date.now();
+  if(sysHistAt&&now-sysHistAt>3500) sysHist.push(null); // the sampler idled: break the line instead of joining across the gap
+  sysHistAt=now;
+  sysHist.push({cpu:s.cpu&&s.cpu.frac,ram:s.ram&&s.ram.frac,busy:s.disk&&s.disk.busy,down:s.net&&s.net.down,up:s.net&&s.net.up});
+  while(sysHist.length>SYS_HISTORY) sysHist.shift();
+}
+// A 120 x 24 box, newest sample at the right edge; returns the line and the area under it
+function sparkPaths(key,max){
+  const dx=120/(SYS_HISTORY-1), off=SYS_HISTORY-sysHist.length, Y=24;
+  let l='', a='', seg=[];
+  const flush=()=>{
+    if(!seg.length) return;
+    if(seg.length===1) seg.push([seg[0][0]+0.6,seg[0][1]]); // a lone sample still leaves a dot
+    const pts=seg.map(p=>p[0].toFixed(1)+' '+p[1].toFixed(1)).join('L');
+    l+='M'+pts; a+='M'+seg[0][0].toFixed(1)+' '+Y+'L'+pts+'L'+seg[seg.length-1][0].toFixed(1)+' '+Y+'Z';
+    seg=[];
+  };
+  sysHist.forEach((e,i)=>{
+    const v=e&&e[key];
+    if(v==null){ flush(); return; }
+    seg.push([(off+i)*dx,(Y-1)-Math.min(1,v/max)*(Y-3)]);
+  });
+  flush();
+  return {l,a};
+}
+function sparkSlot(key){
+  const cur=sysHist.length?sysHist[sysHist.length-1]:null, v=cur&&cur[key];
+  return {c:v==null?DIM:tone(v),...sparkPaths(key,1)};
+}
+function netSparkSlot(){
+  let max=125000; // 1 Mb/s, so an idle line stays flat instead of a magnified trickle
+  for(const e of sysHist) if(e) max=Math.max(max,e.down||0,e.up||0);
+  return {c:'#e8e8ea',...sparkPaths('down',max),l2:sparkPaths('up',max).l};
+}
+
+// ---- Pill ----
+function setText(el,t){ if(el.textContent!==t) el.textContent=t; }
+function buildSysPill(){
+  const on=sysMetrics;
+  sysEl.hidden=!on.length;
+  sysEl.dataset.n=String(on.length);
+  sysEl.innerHTML=on.map(m=>m==='net'
+    ? `<div class="sm sm-net" data-m="net"><div class="sm-n"><i>↓</i><span></span></div><div class="sm-n"><i>↑</i><span></span></div></div>`
+    : `<div class="sm" data-m="${m}"><div class="sm-t"><span class="sm-l">${m==='cpu'?'CPU':m==='ram'?'RAM':'DISK'}</span><span class="sm-v"></span></div><div class="sm-b"><i></i></div></div>`).join('');
+  sysRefs={};
+  for(const m of on){
+    const el=sysEl.querySelector(`[data-m="${m}"]`);
+    sysRefs[m]=m==='net'?{el,d:el.children[0].lastChild,u:el.children[1].lastChild}
+      :{el,l:el.querySelector('.sm-l'),v:el.querySelector('.sm-v'),b:el.querySelector('.sm-b i')};
+  }
+  updateSysPill();
+}
+function updateSysPill(){
+  const s=sysSnap;
+  for(const m of sysMetrics){
+    const r=sysRefs[m]; if(!r) continue;
+    if(m==='net'){
+      const n=s.net, on=!!(n&&n.connected);
+      r.el.classList.toggle('off',!!n&&!on);
+      r.el.classList.toggle('testing',!!(speedSnap&&speedSnap.state==='running'));
+      if(!n){ setText(r.d,'—'); setText(r.u,'—'); }
+      else if(!on){ setText(r.d,sysText('pillOffline')); setText(r.u,''); }
+      else{ setText(r.d,n.down!=null?bitsCompact(n.down):'—'); setText(r.u,n.up!=null?bitsCompact(n.up):'—'); }
+      continue;
+    }
+    const d=s[m];
+    setText(r.v,d?pctInt(d.frac):'—');
+    r.b.style.width=d?(d.frac*100).toFixed(0)+'%':'0';
+    r.b.style.background=d?tone(d.frac):'';
+    if(m==='disk') setText(r.l,diskWord(d));
+  }
+}
+
+// ---- Card ----
+function sysSpark(key,two){
+  return `<svg class="spark" viewBox="0 0 120 24" preserveAspectRatio="none" data-k="${key}"><path class="sp-a"/><path class="sp-l"/>${two?'<path class="sp-l2"/>':''}</svg>`;
+}
+const barSlot=f=>f==null?{w:0}:{w:f*100,bg:tone(f)};
+// Markup with no numbers in it, plus the slots that hold them; the markup doubles as the signature of the card's shape
+function buildSysCard(){
+  const s=sysSnap, slots={};
+  let h=`<div class="c-head"><svg class="sysg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 8.5h3l1.5-4.5 3 8 1.5-3.5h4"/></svg><span class="c-title">${sysText('title')}</span></div>`;
+  for(const m of sysMetrics){
+    if(m==='cpu'){
+      const c=s.cpu;
+      h+=`<div class="win"><div class="w-row"><span class="w-label">${sysText('cpu')}</span><span class="w-val" data-k="cpu.v"></span></div>
+        <div class="w-track"><div class="w-fill" data-k="cpu.b"></div></div>${sysSpark('cpu.s')}<div class="w-used" data-k="cpu.d"></div></div>`;
+      slots['cpu.v']={t:c?pctInt(c.frac):'—'};
+      slots['cpu.b']=barSlot(c&&c.frac);
+      slots['cpu.s']=sparkSlot('cpu');
+      slots['cpu.d']={t:c?[cpuName(c.name),c.threads?sysText('threads',c.threads):''].filter(Boolean).join(' · '):''};
+    }else if(m==='ram'){
+      const r=s.ram;
+      h+=`<div class="win"><div class="w-row"><span class="w-label">${sysText('ram')}</span><span class="w-val" data-k="ram.v"></span></div>
+        <div class="w-track"><div class="w-fill" data-k="ram.b"></div></div>${sysSpark('ram.s')}<div class="w-used" data-k="ram.d"></div></div>`;
+      slots['ram.v']={t:r?pctInt(r.frac):'—'};
+      slots['ram.b']=barSlot(r&&r.frac);
+      slots['ram.s']=sparkSlot('ram');
+      slots['ram.d']={t:r&&r.used!=null&&r.total
+        ?sysText('usedOf',fmtSize(r.used),fmtSize(r.total))+' · '+sysText('free',fmtSize(Math.max(0,r.total-r.used))):''};
+    }else if(m==='disk'){
+      const d=s.disk, allOthers=d?d.others:[], others=allOthers.slice(0,SYS_DRIVE_ROWS); // the card is clipped, not scrolled: the rest are counted
+      const hasBusy=!!d&&d.busy!=null, hasRw=!!d&&(d.read!=null||d.write!=null);
+      h+=`<div class="win"><div class="w-row"><span class="w-label" data-k="disk.l"></span><span class="w-val" data-k="disk.v"></span></div>
+        <div class="w-track"><div class="w-fill" data-k="disk.b"></div></div><div class="w-used" data-k="disk.d"></div>`
+        +(hasBusy?sysSpark('disk.s'):'')
+        +(hasBusy?`<div class="w-used" data-k="disk.a"></div>`:'')
+        +(hasRw?`<div class="w-used" data-k="disk.rw"></div>`:'')
+        +others.map((o,i)=>`<div class="w-used" data-k="disk.o${i}"></div>`).join('')+moreRow(allOthers.length-others.length)+`</div>`;
+      slots['disk.l']={t:d?(diskWord(d)==='DISK'?sysText('disk'):diskWord(d))+(d.drive?` (${d.drive})`:''):sysText('disk')};
+      slots['disk.v']={t:d?pctInt(d.frac):'—'};
+      slots['disk.b']=barSlot(d&&d.frac);
+      slots['disk.d']={t:d&&d.used!=null&&d.total
+        ?sysText('usedOf',fmtSize(d.used),fmtSize(d.total))+' · '+sysText('free',fmtSize(Math.max(0,d.total-d.used))):''};
+      if(hasBusy){
+        slots['disk.s']=sparkSlot('busy');
+        slots['disk.a']={t:sysText('active',Math.round(d.busy*100))};
+      }
+      if(hasRw){ // spaces inside an item are hard, so a narrow card breaks between the two and not in the middle of one
+        const parts=[];
+        if(d.read!=null) parts.push(sysText('read',byteRate(d.read)));
+        if(d.write!=null) parts.push(sysText('write',byteRate(d.write)));
+        slots['disk.rw']={t:parts.map(p=>p.replace(/ /g,'\u00a0')).join(' · ')};
+      }
+      others.forEach((o,i)=>{
+        slots['disk.o'+i]={t:`${o.drive} ${pctInt(o.frac)}`+(o.used!=null&&o.total?' · '+sysText('usedOf',fmtSize(o.used),fmtSize(o.total)):'')};
+      });
+    }else if(m==='net'){
+      const n=s.net;
+      h+=`<div class="win"><div class="w-row"><span class="w-label">${sysText('net')}</span></div>`;
+      if(!n) h+=`<div class="w-used">—</div>`;
+      else if(!n.connected) h+=`<div class="w-used">${sysText('offline')}</div>`;
+      else{
+        h+=`<div class="w-used" data-k="net.a"></div>
+          <div class="w-row" style="margin-top:6px"><span class="w-label"><i class="dot" style="background:#e8e8ea"></i>${sysText('down')}</span><span class="w-val" data-k="net.d"></span></div>
+          <div class="w-row" style="margin-top:2px"><span class="w-label"><i class="dot" style="background:#808080"></i>${sysText('up')}</span><span class="w-val" data-k="net.u"></span></div>
+          ${sysSpark('net.s',true)}`;
+        const kind=n.kind==='wifi'?'Wi-Fi':n.kind==='ethernet'?'Ethernet':'';
+        const parts=[n.name];
+        if(kind&&!n.name.toLowerCase().includes(kind.toLowerCase())) parts.push(kind);
+        if(n.link) parts.push(linkSpeed(n.link));
+        slots['net.a']={t:parts.filter(Boolean).join(' · ')};
+        slots['net.d']={t:n.down!=null?bitsRate(n.down*8):'—'};
+        slots['net.u']={t:n.up!=null?bitsRate(n.up*8):'—'};
+        slots['net.s']=netSparkSlot();
+      }
+      h+=`</div>`;
+      const sp=speedSnap;
+      if(sp){
+        const run=sp.state==='running';
+        h+=`<div class="c-sessions"><div class="w-row"><span class="w-label">${sysText('speed')}</span>`
+          +(run?`<span class="w-val" data-k="st.live"></span>`:`<span class="lnk" role="button" data-act="speedtest">${sysText('testNow')}</span>`)+`</div>`;
+        if(run){
+          h+=`<div class="w-used" data-k="st.phase"></div><div class="w-track"><div class="w-fill" style="background:#e8e8ea" data-k="st.bar"></div></div><div class="w-used" data-k="st.part"></div>`;
+          slots['st.live']={t:sp.live!=null?bitsRate(sp.live):''};
+          slots['st.phase']={t:sysText('phase')[sp.phase]||sysText('phase')._};
+          slots['st.bar']={w:sp.progress*100};
+          const got=[];
+          if(sp.ms!=null) got.push(nf(sp.ms,sp.ms<10?1:0)+' ms');
+          if(sp.down!=null) got.push('↓ '+bitsRate(sp.down));
+          if(sp.up!=null) got.push('↑ '+bitsRate(sp.up));
+          slots['st.part']={t:got.join(' · ')};
+        }else{
+          if(sp.state==='error'&&sp.error){ h+=`<div class="w-used err" data-k="st.err"></div>`; slots['st.err']={t:sysText('failed',sysText('speedErr',sp.error))}; }
+          if(sp.last){
+            h+=`<div class="st-res"><span data-k="st.dn"></span><span data-k="st.up"></span><span data-k="st.ms"></span></div><div class="w-used" data-k="st.ago"></div>`;
+            slots['st.dn']={t:'↓ '+bitsRate(sp.last.down)};
+            slots['st.up']={t:'↑ '+bitsRate(sp.last.up)};
+            slots['st.ms']={t:sp.last.ms!=null?nf(sp.last.ms,sp.last.ms<10?1:0)+' ms':''};
+            slots['st.ago']={t:agoText(sp.last.at)};
+          }else h+=`<div class="w-used">${sysText('never')}</div>`;
+        }
+        h+=`</div>`;
+      }
+    }
+  }
+  return {html:h,slots};
+}
+function patchSlot(el,v){
+  if(v.t!==undefined) setText(el,v.t);
+  if(v.w!==undefined) el.style.width=v.w.toFixed(1)+'%';
+  if(v.bg!==undefined) el.style.background=v.bg;
+  if(v.l!==undefined){ // a sparkline: area, line and (internet) a second line
+    const [a,l,l2]=el.children;
+    el.style.color=v.c;
+    a.setAttribute('d',v.a); l.setAttribute('d',v.l);
+    if(l2) l2.setAttribute('d',v.l2);
+  }
+}
+function renderSysCard(){
+  const {html,slots}=buildSysCard();
+  if(html!==sysSig){
+    card.innerHTML=html; sysSig=html; sysEls={};
+    for(const el of card.querySelectorAll('[data-k]')) sysEls[el.dataset.k]=el;
+  }
+  for(const k in slots){ if(sysEls[k]) patchSlot(sysEls[k],slots[k]); }
+}
+function noteCardSize(){ cardSize=card.offsetWidth+'x'+card.offsetHeight; }
+// A tick can change the card's height (a line appears, the test starts): place it again and report the new rectangles,
+// but only then, since every report costs the Rust side a hit-test rebuild
+function syncCardSize(){
+  const k=card.offsetWidth+'x'+card.offsetHeight;
+  if(k===cardSize) return;
+  cardSize=k; placeCard(); reportHot();
+}
+const sysCardOpen=()=>card.classList.contains('show')&&hoverId==='system';
+// "Test now" acts on mouseup, through the card: a tick that rewrites the link between the press and the release
+// would swallow a click, but the release still lands on whatever link is there by then
+card.addEventListener('mouseup',e=>{
+  if(e.button!==0||!e.target||!e.target.closest||!e.target.closest('[data-act="speedtest"]')) return;
+  Promise.resolve().then(()=>invoke('run_speedtest')).catch(()=>{});
+});
+
+// ---- Wiring ----
+// How busy the processor and the disk are swings with the load from one second to the next, and a number that
+// hops 30 points a tick cannot be read. A short moving average (weight 0.4 on each new second, about two seconds
+// of memory) keeps it steady and still live. Space, memory and the speeds are shown as measured.
+const SYS_SMOOTH=0.4;
+let sysEma={cpu:null,busy:null};
+function smoothed(key,v){
+  const prev=sysEma[key];
+  return sysEma[key]=prev==null?v:prev+SYS_SMOOTH*(v-prev);
+}
+function onSysmon(p,seed){ // `seed` = the answer to get_sysmon at start: shown, but neither history nor proof of a live sampler
+  const n=normSys(p); if(!n||(seed&&sysAt>0)) return; // a late answer must not overwrite a live sample
+  if(!seed){
+    if(sysAt&&Date.now()-sysAt>3500) sysEma={cpu:null,busy:null}; // the sampler idled: do not blend across the gap
+    if(n.cpu) n.cpu.frac=smoothed('cpu',n.cpu.frac); else sysEma.cpu=null;
+    if(n.disk&&n.disk.busy!=null) n.disk.busy=smoothed('busy',n.disk.busy); else sysEma.busy=null;
+  }
+  sysSnap=n;
+  if(!seed){ sysAt=Date.now(); pushHist(n); sysEl.classList.remove('stale'); }
+  updateSysPill();
+  if(sysCardOpen()){ renderSysCard(); syncCardSize(); }
+}
+function onSpeed(p){
+  const n=normSpeed(p); if(!n) return;
+  speedSnap=n;
+  updateSysPill();
+  if(sysCardOpen()){ renderSysCard(); syncCardSize(); }
+}
+function setSysMetrics(v){
+  if(!Array.isArray(v)) return;
+  const next=SYS_IDS.filter(id=>v.includes(id));
+  if(next.join()===sysMetrics.join()) return;
+  sysMetrics=next;
+  buildSysPill();
+  const onSys=hoverId==='system';
+  // Also while the card is closed: a press on the pill's padding opens whatever hoverId names, and the block is gone
+  if(onSys&&!next.length) hoverId=providers()[0].id;
+  if(card.classList.contains('show')){
+    if(onSys) renderCard();
+    armWatchdog();
+  }
+  reportHot(); // the pill grew or shrank
+}
+// A throwing invoke or listener (a stub, a half-installed build) must not stop the rest of the page
+function sysAsk(cmd,fn){ try{ Promise.resolve(invoke(cmd)).then(fn).catch(()=>{}); }catch(e){} }
+function sysListen(name,fn){
+  try{ listen(name,e=>{ try{ fn(e&&e.payload); }catch(err){ jslog(name+' handler: '+err); } }).catch(()=>{}); }catch(e){}
+}
+setInterval(()=>sysEl.classList.toggle('stale',sysAt>0&&Date.now()-sysAt>4000),2000);
+
 // ===== Diagnostics + geometry =====
 function jslog(m){invoke('log_js',{msg:String(m)}).catch(()=>{});}
 function callq(cmd,args){ // invoke with visible failure: any command error is reported on screen (a silent .catch used to swallow them)
@@ -688,10 +1229,13 @@ function reportHot(){
 function armWatchdog(){
   requestAnimationFrame(reportHot); // wait one frame so renderCard's new content is laid out before measuring
 }
-// Viewport fit (pure front-end fallback, independent of Rust): Rust sizes and zooms the window so this page is 360 CSS px wide,
-// so if this page's CSS viewport is not 360 wide the WebView's DPR disagrees with the monitor; CSS zoom pulls the layout back to the design size.
+// Viewport fit (pure front-end fallback, independent of Rust): Rust sizes and zooms the window so this page is 360 CSS px wide
+// (720 on the flat edges, where the pill is a row), so if the CSS viewport is not that wide the WebView's DPR disagrees with
+// the monitor; CSS zoom pulls the layout back to the design size. Dividing a flat window by 360 made every measurement
+// 1.4x too big and pushed the card 1.4x too far from the pill.
+function designWidth(){ return edgeIsVertical()?360:720; }
 function fitZoom(){
-  const z=innerWidth/360;
+  const z=innerWidth/designWidth();
   document.documentElement.style.zoom=(Math.abs(z-1)>0.02)?String(z):'';
   return z;
 }
@@ -709,7 +1253,16 @@ matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`).addEventListener('cha
    Leaving the window: document mouseout (relatedTarget=null) plus the Rust watchdog (system cursor) as a second line. */
 function inRect(x,y,r,pad){return x>=r.left-pad&&y>=r.top-pad&&x<r.right+pad&&y<r.bottom+pad;}
 function cellAt(x,y){
-  for(const el of pill.querySelectorAll('.cell')){ if(inRect(x,y,el.getBoundingClientRect(),6)) return el.dataset.p; }
+  // On the flat edges the cells stand side by side and the System group is shorter than the rings: by its own rectangle alone, the
+  // bands of pill above and below it belonged to no cell, so pointing there opened (or kept) the card of whatever was hovered before,
+  // and a press there opened that provider's page. Along a flat pill the column decides and the whole height of the pill counts.
+  const flat=!edgeIsVertical(), p=flat?pill.getBoundingClientRect():null;
+  if(flat&&(y<p.top||y>=p.bottom)) return null;
+  for(const el of pill.querySelectorAll('.cell')){
+    if(el.hidden) continue; // a hidden cell's empty rect sits at 0,0
+    const r=el.getBoundingClientRect();
+    if(flat?(x>=r.left-6&&x<r.right+6):inRect(x,y,r,6)) return el.dataset.p;
+  }
   return null;
 }
 function pointerInHot(x,y){
@@ -798,6 +1351,13 @@ invoke('get_notch_edge').then(applyEdge).catch(()=>{});
 invoke('get_codex').then(u=>{codexSnap=u||codexSnap;renderRing();}).catch(()=>{});
 invoke('get_usage').then(u=>{usage=u||usage;renderRing();}).catch(e=>notice('get_usage failed: '+e));
 invoke('get_state').then(s=>{stateSnap=s||stateSnap;setUiLanguage(stateSnap.lang_resolved);renderRing();}).catch(()=>{});
+// System block. An older Rust side answers none of these and the block simply stays hidden.
+sysListen('sys_metrics',setSysMetrics);
+sysListen('sysmon',p=>onSysmon(p,false));
+sysListen('speedtest',onSpeed);
+sysAsk('get_sys_metrics',setSysMetrics);
+sysAsk('get_sysmon',p=>onSysmon(p,true));
+sysAsk('get_speedtest',onSpeed);
 setInterval(renderRing,30_000); // stale state and reset copy move with time
 </script>
 </body>

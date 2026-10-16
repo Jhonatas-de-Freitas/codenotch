@@ -38,4 +38,14 @@ windows = { version = "0.58", features = [
   "Win32_Globalization",
   "Win32_System_Console",
   "Win32_System_Registry",
+  "Win32_Security_Cryptography",
+  # The System block's sampler (sysmon.rs): memory, drives and their counters, network adapters
+  "Win32_System_SystemInformation",
+  "Win32_Storage_FileSystem",
+  "Win32_Security",
+  "Win32_System_IO",
+  "Win32_System_Ioctl",
+  "Win32_System_Performance",
+  "Win32_NetworkManagement_IpHelper",
+  "Win32_NetworkManagement_Ndis",
 ] }

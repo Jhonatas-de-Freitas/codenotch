@@ -8,7 +8,8 @@
 //!
 //! None of those → the page falls back to a letter.
 //! SVGs are inlined into the DOM as text (`fill="currentColor"` follows the CSS white/dimmed state);
-//! PNGs and app icons go through <img>. Ids match the page and upstream: claude / codex / cursor / grok / gemini.
+//! PNGs, GIFs and app icons go through <img> (a GIF keeps animating there, same as in any browser).
+//! Ids match the page and upstream: claude / codex / cursor / grok / gemini.
 
 use serde::Serialize;
 use std::collections::HashMap;
@@ -111,9 +112,13 @@ fn b64(bytes: &[u8]) -> String {
     out
 }
 
+/// A dropped-in GIF is a whole downloaded animation, not a tiny icon; 8 MB comfortably covers a
+/// short Giphy loop while still refusing a pathologically large file.
+const MAX_GLYPH_BYTES: usize = 8 * 1024 * 1024;
+
 fn from_file(p: &Path) -> Option<Glyph> {
     let bytes = std::fs::read(p).ok()?;
-    if bytes.is_empty() || bytes.len() > 512 * 1024 {
+    if bytes.is_empty() || bytes.len() > MAX_GLYPH_BYTES {
         return None;
     }
     let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
@@ -127,6 +132,12 @@ fn from_file(p: &Path) -> Option<Glyph> {
         "png" => Some(Glyph {
             kind: "png".into(),
             url: format!("data:image/png;base64,{}", b64(&bytes)),
+            source: p.display().to_string(),
+            ..Default::default()
+        }),
+        "gif" => Some(Glyph {
+            kind: "gif".into(),
+            url: format!("data:image/gif;base64,{}", b64(&bytes)),
             source: p.display().to_string(),
             ..Default::default()
         }),
@@ -272,7 +283,7 @@ pub fn collect() -> HashMap<String, Glyph> {
     for id in IDS {
         let mut found: Option<Glyph> = None;
         'dirs: for d in &dirs {
-            for ext in ["svg", "png"] {
+            for ext in ["svg", "png", "gif"] {
                 let p = d.join(format!("{id}.{ext}"));
                 if let Some(g) = from_file(&p) {
                     found = Some(g);
@@ -316,4 +327,20 @@ pub fn probe() -> String {
         });
     }
     lines.join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_file_reads_a_gif_as_an_animated_data_url() {
+        let path = std::env::temp_dir().join(format!("codenotch-glyphs-test-{}.gif", std::process::id()));
+        let bytes = b"GIF89a-fake-but-that-is-all-from_file-checks-for";
+        std::fs::write(&path, bytes).unwrap();
+        let g = from_file(&path).expect("a .gif should produce a glyph");
+        assert_eq!(g.kind, "gif");
+        assert_eq!(g.url, format!("data:image/gif;base64,{}", b64(bytes)));
+        let _ = std::fs::remove_file(&path);
+    }
 }

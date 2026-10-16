@@ -109,6 +109,17 @@
   select option{color:#000}
   .link{border:0;background:none;padding:0;color:var(--accent);cursor:pointer;font-size:12px}
   .link:hover{text-decoration:underline}
+  /* A row with a caption under its name, and the speed test's live readout. The Test button is never
+     `disabled` while it runs (a focused button that gets disabled drops keyboard focus), so it dims by aria-disabled. */
+  .item .lbl{display:flex;flex-direction:column;min-width:0}
+  .btn[aria-disabled="true"]{opacity:.55;pointer-events:none}
+  #btn-speed{min-width:100px}
+  .speed-main{display:flex;flex-direction:column;min-width:0;flex:1}
+  .speed-line{font-size:12px;color:var(--text2);overflow-wrap:anywhere}
+  .speed-line.err{color:var(--danger)}
+  .speed-bar{height:3px;border-radius:2px;background:var(--seg-bg);margin-top:6px;overflow:hidden}
+  .speed-bar i{display:block;height:100%;width:0;background:var(--accent)}
+  .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 
   #toast{position:fixed;right:18px;bottom:14px;background:var(--side);border:1px solid var(--line);border-radius:8px;
     padding:5px 10px;font-size:12px;color:var(--text2);opacity:0;transition:opacity .3s;pointer-events:none}
@@ -160,6 +171,24 @@
           <div class="item cap" id="cap-screen" data-dynamic hidden></div>
           <div class="item"><span class="hint">The pill can also be dragged: pick it up and drop it anywhere, and it snaps to the nearest edge of the screen you dropped it on. If it has ended up somewhere you cannot see it — off a screen you have unplugged, say — this puts it back in the middle of the main screen's right-hand edge.</span><button class="btn" id="btn-recentre">Recentre</button></div>
         </div>
+        <div class="sec">System</div>
+        <div class="group">
+          <div class="item"><span class="lbl"><span>Processor (CPU)</span><span class="hint">How busy the processor is.</span></span><button class="switch" id="sw-sys-cpu" data-sys="cpu" role="switch" aria-checked="true" aria-label="Processor (CPU)"></button></div>
+          <div class="item"><span class="lbl"><span>Memory (RAM)</span><span class="hint">Memory in use, out of everything installed.</span></span><button class="switch" id="sw-sys-ram" data-sys="ram" role="switch" aria-checked="true" aria-label="Memory (RAM)"></button></div>
+          <div class="item"><span class="lbl"><span>Disk (SSD)</span><span class="hint">Space used on the system drive and how busy it is.</span></span><button class="switch" id="sw-sys-disk" data-sys="disk" role="switch" aria-checked="true" aria-label="Disk (SSD)"></button></div>
+          <div class="item"><span class="lbl"><span>Internet speed</span><span class="hint">Live download and upload speed of your connection.</span></span><button class="switch" id="sw-sys-net" data-sys="net" role="switch" aria-checked="true" aria-label="Internet speed"></button></div>
+          <div class="item cap">Each one you leave on adds a row to the System block on the notch. Turn all four off and the block disappears.</div>
+          <div class="item">
+            <div class="speed-main">
+              <span>Internet speed test</span>
+              <div id="speed-out" data-dynamic></div>
+              <div class="speed-bar" id="speed-bar" role="progressbar" aria-label="Internet speed test" aria-valuemin="0" aria-valuemax="100" hidden><i id="speed-fill"></i></div>
+              <span class="sr-only" id="speed-status" role="status" data-dynamic></span>
+            </div>
+            <button class="btn" id="btn-speed" data-dynamic>Test now</button>
+          </div>
+          <div class="item cap">Runs only when you press the button. It downloads and uploads test data from the public speed-test servers run by Cloudflare, and uses up to about 500 MB.</div>
+        </div>
         <div class="sec">App</div>
         <div class="group">
           <div class="item"><span>App icon</span><span class="seg" id="seg-tray"><button data-v="tray">System tray</button><button data-v="none">Neither</button></span></div>
@@ -169,6 +198,7 @@
             <select id="lang" aria-label="Language">
               <option value="auto">Follow system</option>
               <option value="en">English</option>
+              <option value="pt">Português</option>
               <option value="zh">&#20013;&#25991;</option>
               <option value="ja">&#26085;&#26412;&#35486;</option>
               <option value="ko">&#54620;&#44397;&#50612;</option>
@@ -473,13 +503,117 @@ const KO_STATIC = {
   'No icon in the system tray. Open Codenotch again from the Start menu to bring these settings back.':'시스템 트레이에 아이콘이 없습니다. 이 설정을 다시 가져오려면 시작 메뉴에서 Codenotch를 다시 여세요.',
   'Model data':'모델 데이터'
 };
-const STATIC_TEXT = { ru: RU_STATIC, zh: ZH_STATIC, ja: JA_STATIC, ko: KO_STATIC };
+const PT_STATIC = {
+  'Settings sections':'Seções de configurações',
+  'Close':'Fechar',
+  'Accounts':'Contas',
+  'Appearance':'Aparência',
+  'General':'Geral',
+  'Quit Codenotch':'Sair do Codenotch',
+  'Connected':'Conectado',
+  'Not connected':'Não conectado',
+  'These have no ring to place. Switch one on and it joins the end of the list above.':'Estes não têm anel para mostrar. Ative um e ele entra no fim da lista acima.',
+  'One provider always stays ticked, so the pill is never empty.':'Pelo menos um provedor sempre fica marcado, para a barra nunca ficar vazia.',
+  'At least one provider stays on the notch':'Pelo menos um provedor permanece na barra',
+  'Notch reads':'O que a barra mostra',
+  'Model data':'Dados do modelo',
+  'Automatic':'Automático',
+  '5-Hour Limit':'Limite de 5 horas',
+  'Weekly Limit':'Limite semanal',
+  'Gemini Models':'Modelos Gemini',
+  'Claude and GPT models':'Modelos Claude e GPT',
+  'Let Claude Code notify Codenotch':'Deixar o Claude Code avisar o Codenotch',
+  'Turning this on adds a few lines to your Claude Code settings file so that Claude Code sends Codenotch a short message when a session starts, when it is working, when it is waiting for your answer, and when it finishes. That is what makes the ring spin and the amber ring pulse.':'Ativar isso acrescenta algumas linhas no arquivo de configurações do Claude Code, para que ele envie uma mensagem curta ao Codenotch quando uma sessão começa, está em andamento, espera sua resposta e termina. É isso que faz o anel girar e o anel âmbar pulsar.',
+  'Notch':'Barra',
+  'Show':'Exibir',
+  'Always show':'Sempre exibir',
+  'Hide':'Ocultar',
+  'Size':'Tamanho',
+  'Small':'Pequeno',
+  'Medium':'Médio',
+  'Large':'Grande',
+  'Takes the least room on the edge. Readable, but not from across the desk.':'Ocupa menos espaço na borda. Legível de perto, mas não do outro lado da mesa.',
+  'The size the notch was drawn at.':'O tamanho original em que a barra foi desenhada.',
+  'Easier to read at a glance, and harder to ignore.':'Mais fácil de ler de relance, e mais difícil de ignorar.',
+  'Weekly ring':'Anel semanal',
+  'Off':'Desligado',
+  'Inside':'Dentro',
+  'Outside':'Fora',
+  'One ring per provider, showing the headline limit. The weekly allowance stays in the hover card.':'Um anel por provedor, mostrando o limite principal. A cota semanal fica só no card ao passar o mouse.',
+  'A thinner ring for the weekly limit, drawn inside the main one. It shares the gap with the working indicator.':'Um anel mais fino para o limite semanal, desenhado dentro do principal. Ele divide o espaço com o indicador de atividade.',
+  'A thinner ring for the weekly limit, drawn around the main one, in the margin between the ring and the notch edge.':'Um anel mais fino para o limite semanal, desenhado ao redor do principal, na margem entre o anel e a borda da barra.',
+  'The notch stays open with every reading visible.':'A barra fica sempre aberta, com todas as leituras visíveis.',
+  'The black pill against the right-hand edge of the screen, with one ring per tool. Turn it off and the pill disappears; Codenotch keeps counting your usage either way.':'A barra preta na borda direita da tela, com um anel por ferramenta. Desligue e ela desaparece; o Codenotch continua contando seu uso do mesmo jeito.',
+  'Recentre':'Recentralizar',
+  'The pill can be dragged up and down the right-hand edge. If it has ended up somewhere you cannot see it — off the bottom of a screen you have unplugged, say — this drops it back into the middle of the edge.':'A barra pode ser arrastada para cima e para baixo na borda direita. Se ela foi parar em algum lugar que você não enxerga — fora da tela de um monitor desconectado, por exemplo — isso a traz de volta pro meio da borda.',
+  'The notch is back in the middle':'A barra voltou pro meio',
+  'App':'Aplicativo',
+  'App icon':'Ícone do aplicativo',
+  'System tray':'Bandeja do sistema',
+  'Neither':'Nenhum dos dois',
+  'The small icon down by the clock. Right-clicking it opens this window, refreshes the readings, or quits Codenotch.':'O ícone pequeno perto do relógio. Clicar com o botão direito abre esta janela, atualiza as leituras ou fecha o Codenotch.',
+  'Held on: the notch is hidden, so this icon is the only way left to reach Codenotch. Switch the notch back on first if you want to hide it.':'Mantido ligado: a barra está oculta, então esse ícone é o único jeito de acessar o Codenotch. Ligue a barra de novo primeiro se quiser esconder este ícone.',
+  'The taskbar icon has been kept on. With the notch hidden it is the only way left to open this window or to quit Codenotch, so Codenotch will not let both of them be switched off at the same time.':'O ícone da barra de tarefas foi mantido ligado. Com a barra oculta, ele é o único jeito de abrir esta janela ou fechar o Codenotch, então o Codenotch não deixa os dois serem desligados ao mesmo tempo.',
+  'Language':'Idioma',
+  'Follow system':'Seguir o sistema',
+  'Sets the language used by Codenotch. “Follow system” uses the language Windows itself is set to.':'Define o idioma usado pelo Codenotch. "Seguir o sistema" usa o idioma configurado no próprio Windows.',
+  'Open Codenotch at login':'Abrir o Codenotch ao entrar no Windows',
+  'Codenotch opens by itself every time you sign in to this computer, and waits quietly in the background until a coding session starts. Turn it off and you have to open Codenotch yourself.':'O Codenotch abre sozinho toda vez que você entra neste computador, e espera quieto em segundo plano até uma sessão de código começar. Se desligar, você precisa abrir o Codenotch manualmente.',
+  'Version':'Versão',
+  'Data folder':'Pasta de dados',
+  'Open folder':'Abrir pasta',
+  'Everything Codenotch remembers lives in one folder: your settings, its log file, and the "glyphs" folder where you can drop your own icons. Opens in File Explorer.':'Tudo que o Codenotch guarda fica em uma pasta só: suas configurações, o arquivo de log, e a pasta "glyphs" onde você pode colocar seus próprios ícones. Abre no Explorador de Arquivos.',
+  'App designed and developed by':'Aplicativo projetado e desenvolvido por',
+  'Saved':'Salvo',
+  'Edge':'Borda',
+  'Left':'Esquerda',
+  'Right':'Direita',
+  'Top':'Cima',
+  'Bottom':'Baixo',
+  'Screen':'Tela',
+  'Main':'Principal',
+  'Stands upright on the left-hand edge, with the card opening to its right.':'Fica em pé na borda esquerda, com o card abrindo para a direita.',
+  'Stands upright on the right-hand edge, the side it was drawn for.':'Fica em pé na borda direita, o lado para o qual foi originalmente desenhada.',
+  'Lies flat along the top edge, with the card opening below it.':'Fica deitada na borda superior, com o card abrindo por baixo.',
+  'Lies flat along the bottom edge, with the card opening above it.':'Fica deitada na borda inferior, com o card abrindo por cima.',
+  'Which screen the notch lives on. Dragging it onto another screen sets this too.':'Em qual tela a barra fica. Arrastá-la para outra tela também muda isso.',
+  'this screen cannot be remembered by name':'esta tela não pode ser lembrada pelo nome',
+  'The pill can also be dragged: pick it up and drop it anywhere, and it snaps to the nearest edge of the screen you dropped it on. If it has ended up somewhere you cannot see it — off a screen you have unplugged, say — this puts it back in the middle of the main screen\'s right-hand edge.':'A barra também pode ser arrastada: pegue e solte em qualquer lugar, e ela gruda na borda mais próxima da tela onde você soltou. Se ela foi parar em algum lugar que você não enxerga — fora de um monitor desconectado, por exemplo — isso a traz de volta pro meio da borda direita da tela principal.',
+  'System':'Sistema',
+  'Processor (CPU)':'Processador (CPU)',
+  'How busy the processor is.':'O quanto o processador está sendo usado.',
+  'Memory (RAM)':'Memória (RAM)',
+  'Memory in use, out of everything installed.':'Memória em uso, do total instalado.',
+  'Disk (SSD)':'Disco (SSD)',
+  'Space used on the system drive and how busy it is.':'Espaço usado no disco do sistema e o quanto ele está ocupado.',
+  'Internet speed':'Velocidade da internet',
+  'Live download and upload speed of your connection.':'Velocidade de download e upload da sua conexão em tempo real.',
+  'Each one you leave on adds a row to the System block on the notch. Turn all four off and the block disappears.':'Cada opção que você deixa ligada acrescenta uma linha ao bloco Sistema na barra. Desligue as quatro e o bloco some.',
+  'Internet speed test':'Teste de velocidade da internet',
+  'Runs only when you press the button. It downloads and uploads test data from the public speed-test servers run by Cloudflare, and uses up to about 500 MB.':'Só roda quando você aperta o botão. Baixa e envia dados de teste para os servidores públicos de teste de velocidade da Cloudflare e usa até cerca de 500 MB.',
+  // drawn by the scripts, so they never pass through applyStaticUi()
+  'Test now':'Testar agora',
+  'Testing…':'Testando…',
+  'Starting…':'Iniciando…',
+  'Measuring latency…':'Medindo a latência…',
+  'Testing download…':'Testando o download…',
+  'Testing upload…':'Testando o upload…',
+  'Never run':'Nunca executado',
+  'Test failed':'Falha no teste',
+  'Latency':'Latência',
+  'just now':'agora há pouco',
+  '{n} min ago':'há {n} min',
+  '{n} h ago':'há {n} h',
+  '{n} d ago':'há {n} d',
+};
+const STATIC_TEXT = { ru: RU_STATIC, zh: ZH_STATIC, ja: JA_STATIC, ko: KO_STATIC, pt: PT_STATIC };
 const STATUS_TEXT = {
   en:{ ok:'', stale:'last reading is old', needsAuth:'not signed in', absent:'not installed', none:'nothing to report', error:'not reachable' },
   ru:{ ok:'', stale:'данные устарели', needsAuth:'не выполнен вход', absent:'не установлен', none:'нет данных', error:'недоступен' },
   zh:{ ok:'', stale:'上次读数已过期', needsAuth:'未登录', absent:'未安装', none:'暂无报告', error:'无法连接' },
   ja:{ ok:'', stale:'最後の読み取りが古いです', needsAuth:'サインインしていません', absent:'インストールされていません', none:'報告するものがありません', error:'到達できません' },
-  ko:{ ok:'', stale:'마지막 읽기가 오래되었습니다', needsAuth:'로그인되지 않음', absent:'설치되지 않음', none:'보고할 내용 없음', error:'연결할 수 없음' }
+  ko:{ ok:'', stale:'마지막 읽기가 오래되었습니다', needsAuth:'로그인되지 않음', absent:'설치되지 않음', none:'보고할 내용 없음', error:'연결할 수 없음' },
+  pt:{ ok:'', stale:'última leitura desatualizada', needsAuth:'não conectado', absent:'não instalado', none:'nada a reportar', error:'inacessível' }
 };
 let uiLang = 'en';
 function ui(key, fallback){ const table = STATIC_TEXT[uiLang]; return (table && table[key]) || fallback; }
@@ -961,6 +1095,141 @@ document.getElementById('seg-weekly').addEventListener('click', e => {
     .then(() => { weeklyBusy = false; renderWeekly(); });
 });
 
+/* ---- Appearance: the System block ------------------------------------------
+   Which rows the notch shows, stored as ids in canonical order. An empty list is allowed: it hides the
+   whole block. Rust cleans the list it is given and answers with what it kept. */
+const SYS_IDS = ['cpu', 'ram', 'disk', 'net'];
+let sysMetrics = SYS_IDS.slice(), sysBusy = false;
+function cleanMetrics(v){ return Array.isArray(v) ? SYS_IDS.filter(id => v.indexOf(id) >= 0) : null; }
+function renderSys(){
+  for(const id of SYS_IDS){
+    const el = document.getElementById('sw-sys-' + id);
+    const on = sysMetrics.indexOf(id) >= 0;
+    el.classList.toggle('on', on);
+    el.setAttribute('aria-checked', on ? 'true' : 'false');
+  }
+}
+function refreshSys(){
+  return call('get_sys_metrics', undefined, null).then(v => {
+    const list = cleanMetrics(v);
+    if(list && !sysBusy) sysMetrics = list;
+    renderSys();
+  });
+}
+/* Not `disabled` while saving, like the other switches: that would drop keyboard focus mid-press. */
+document.getElementById('pane-appearance').addEventListener('click', e => {
+  const sw = e.target.closest('[data-sys]');
+  if(!sw || sysBusy) return;
+  const prev = sysMetrics;
+  const id = sw.dataset.sys;
+  sysMetrics = SYS_IDS.filter(x => x === id ? prev.indexOf(x) < 0 : prev.indexOf(x) >= 0);
+  sysBusy = true;
+  renderSys();
+  invoke('set_sys_metrics', { metrics: sysMetrics })
+    .then(v => { const list = cleanMetrics(v); if(list) sysMetrics = list; toast(); })
+    .catch(err => { sysMetrics = prev; strip('set_sys_metrics failed: ' + errText(err)); })
+    .then(() => { sysBusy = false; renderSys(); });
+});
+
+/* ---- Appearance: the speed test --------------------------------------------
+   Started only by the button. The readout follows the `speedtest` event (about 4 a second while it
+   runs); `speedPending` covers the moment between the click and the first event. Rates arrive in
+   bits per second. */
+let speed = null, speedPending = false, speedWasRunning = false;
+const isNum = x => typeof x === 'number' && isFinite(x);
+function fmtNum(n, digits){
+  try { return new Intl.NumberFormat(document.documentElement.lang || 'en', { minimumFractionDigits:digits, maximumFractionDigits:digits }).format(n); }
+  catch(e) { return n.toFixed(digits); }
+}
+function fmtRate(bits){
+  if(!isNum(bits) || bits < 0) return '—';
+  const mb = bits / 1e6;
+  if(mb >= 1000) return fmtNum(mb / 1000, 1) + ' Gb/s';
+  return fmtNum(mb, mb < 10 ? 1 : 0) + ' Mb/s';
+}
+function fmtMs(ms){ return isNum(ms) && ms >= 0 ? fmtNum(ms, ms < 10 ? 1 : 0) + ' ms' : '—'; }
+function ago(at){
+  const min = Math.floor((Date.now() - at) / 60000);
+  if(!(min >= 1)) return ui('just now', 'just now');
+  const [key, n] = min < 60 ? ['{n} min ago', min] : min < 1440 ? ['{n} h ago', Math.floor(min / 60)] : ['{n} d ago', Math.floor(min / 1440)];
+  return ui(key, key).replace('{n}', n);
+}
+/* The speed test writes its errors in English (speedtest.rs) and they are few and fixed, so Portuguese gets them here;
+   the notch card carries the same table. Any other language shows the English text. */
+const PT_SPEED_ERRORS = [
+  [/^No connection to (.+)$/, 'Sem conexão com $1'],
+  [/^Connection to (.+) timed out$/, 'A conexão com $1 expirou'],
+  [/^Connection to (.+) was interrupted$/, 'A conexão com $1 foi interrompida'],
+  [/^(.+) answered HTTP (\d+)$/, '$1 respondeu com HTTP $2'],
+  [/^Network error talking to (.+) \((.+)\)$/, 'Erro de rede ao acessar $1 ($2)'],
+  [/^Speed test took too long$/, 'O teste demorou demais'],
+  [/^Speed test failed unexpectedly$/, 'O teste falhou de forma inesperada'],
+  [/^No (download|upload) data received$/, 'Nenhum dado de $1 recebido'],
+  [/^[Ll]atency measurement failed$/, 'Não foi possível medir a latência'], // speedtest.rs capitalises this one only
+  [/^(download|upload) measurement failed$/, 'Não foi possível medir o $1'],
+];
+function speedWhy(msg){ return uiLang === 'pt' ? PT_SPEED_ERRORS.reduce((t, [re, to]) => t.replace(re, to), msg) : msg; }
+function speedRunning(){ return speedPending || (speed && speed.state === 'running'); }
+function renderSpeed(){
+  const out = document.getElementById('speed-out');
+  const btn = document.getElementById('btn-speed');
+  const bar = document.getElementById('speed-bar');
+  const running = speedRunning();
+  const lines = [];   // [text, isError]
+  let progress = 0;
+  if(running){
+    const s = speed && speed.state === 'running' ? speed : {};
+    const phase = { latency:'Measuring latency…', download:'Testing download…', upload:'Testing upload…' }[s.phase] || 'Starting…';
+    lines.push([ui(phase, phase) + (isNum(s.live_bits_s) ? ' · ' + fmtRate(s.live_bits_s) : ''), false]);
+    const got = [];
+    if(isNum(s.latency_ms)) got.push(ui('Latency', 'Latency') + ' ' + fmtMs(s.latency_ms));
+    if(isNum(s.down_bits_s)) got.push('Download ' + fmtRate(s.down_bits_s));
+    if(got.length) lines.push([got.join(' · '), false]);
+    progress = isNum(s.progress) ? Math.min(1, Math.max(0, s.progress)) : 0;
+  } else {
+    const last = speed && speed.last && typeof speed.last === 'object' ? speed.last : null;
+    if(speed && speed.state === 'error'){
+      const why = typeof speed.error === 'string' ? speedWhy(speed.error) : '';
+      lines.push([ui('Test failed', 'Test failed') + (why ? ': ' + why : ''), true]);
+    }
+    if(last){
+      lines.push(['Download ' + fmtRate(last.down_bits_s) + ' · Upload ' + fmtRate(last.up_bits_s), false]);
+      lines.push([ui('Latency', 'Latency') + ' ' + fmtMs(last.latency_ms) + (isNum(last.at) ? ' · ' + ago(last.at) : ''), false]);
+    } else if(!lines.length){
+      lines.push([ui('Never run', 'Never run'), false]);
+    }
+  }
+  out.innerHTML = lines.map(([t, bad]) => '<div class="speed-line' + (bad ? ' err' : '') + '">' + esc(t) + '</div>').join('');
+  bar.hidden = !running;
+  bar.setAttribute('aria-valuenow', String(Math.round(progress * 100)));
+  document.getElementById('speed-fill').style.width = (progress * 100) + '%';
+  const label = running ? ui('Testing…', 'Testing…') : ui('Test now', 'Test now');
+  if(btn.textContent !== label) btn.textContent = label;
+  btn.setAttribute('aria-disabled', running ? 'true' : 'false');
+  // The readout above is rebuilt four times a second while a test runs, which no live region could announce sensibly: a screen reader
+  // hears one message when the run starts and one with its outcome (a status message, WCAG 4.1.3), and nothing when the page only re-renders
+  if(!!running !== speedWasRunning){
+    speedWasRunning = !!running;
+    document.getElementById('speed-status').textContent = running ? label : lines.map(l => l[0]).join('. ');
+  }
+}
+function refreshSpeed(){
+  return call('get_speedtest', undefined, null).then(v => {
+    if(v && typeof v === 'object') speed = v;
+    renderSpeed();
+  });
+}
+document.getElementById('btn-speed').addEventListener('click', () => {
+  if(speedRunning()) return;
+  speedPending = true;
+  renderSpeed();
+  invoke('run_speedtest')
+    .catch(e => strip('run_speedtest failed: ' + errText(e)))
+    .then(() => { speedPending = false; return refreshSpeed(); });
+});
+// "5 min ago" goes stale while the window stays open
+setInterval(() => { if(!speedRunning()) renderSpeed(); }, 30000);
+
 /* ---- Appearance: position ------------------------------------------------ */
 document.getElementById('btn-recentre').addEventListener('click', () => {
   invoke('reset_notch_position')
@@ -975,7 +1244,7 @@ document.getElementById('btn-recentre').addEventListener('click', () => {
 });
 
 /* ---- Appearance: language ------------------------------------------------ */
-const LANGS = ['auto', 'en', 'zh', 'ja', 'ko', 'ru', 'uk'];
+const LANGS = ['auto', 'en', 'pt', 'zh', 'ja', 'ko', 'ru', 'uk'];
 document.getElementById('lang').addEventListener('change', e => {
   const previous = e.target.dataset.previous || 'auto';
   const v = LANGS.indexOf(e.target.value) >= 0 ? e.target.value : 'auto';
@@ -1000,6 +1269,12 @@ document.getElementById('author').addEventListener('click', () => {
 })();
 
 /* ---- start ---------------------------------------------------------------- */
+/* An event subscription that cannot be made just leaves the page on what the commands returned. */
+function listenTo(name, handler){
+  try {
+    Promise.resolve(window.__TAURI__.event.listen(name, e => { try { handler(e || {}); } catch(err) { /* a bad payload is skipped */ } })).catch(() => {});
+  } catch(e) { /* no event bridge */ }
+}
 function renderAll(){
   renderAccounts();
   renderFlags();
@@ -1007,6 +1282,8 @@ function renderAll(){
   renderEdge();
   renderScreens();
   renderWeekly();
+  renderSys();
+  renderSpeed();
   drawSwitch(document.getElementById('sw-autostart'), autostart);
   document.getElementById('title').textContent = ui(TITLES[curTab], TITLES[curTab]);
 }
@@ -1026,6 +1303,15 @@ function boot(){
   call('get_notch_edge', undefined, null).then(v => { if(typeof v === 'string') notchEdge = v; renderEdge(); });
   refreshScreens();
   call('get_weekly_ring', undefined, null).then(v => { if(typeof v === 'string') weeklyRing = v; renderWeekly(); });
+  refreshSys();
+  refreshSpeed();
+  listenTo('sys_metrics', e => { const list = cleanMetrics(e.payload); if(list && !sysBusy){ sysMetrics = list; renderSys(); } });
+  listenTo('speedtest', e => {
+    if(!e.payload || typeof e.payload !== 'object') return;
+    speed = e.payload;
+    speedPending = false;
+    renderSpeed();
+  });
   call('get_ui_flags', undefined, null).then(v => { if(v && typeof v === 'object') flags = readFlags(v); renderFlags(); });
   Promise.all([call('get_lang', undefined, 'auto'), call('get_lang_resolved', undefined, 'en')]).then(([raw, resolved]) => {
     const l = (typeof raw === 'string' && LANGS.indexOf(raw) >= 0) ? raw : 'auto';
@@ -1045,6 +1331,8 @@ window.addEventListener('focus', () => {
   // A screen can be plugged in, and the pill dragged to another edge, while this window sits behind
   call('get_notch_edge', undefined, null).then(v => { if(typeof v === 'string') notchEdge = v; renderEdge(); });
   refreshScreens();
+  refreshSys();
+  refreshSpeed();
 });
 boot();
 </script>

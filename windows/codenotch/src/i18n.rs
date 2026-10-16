@@ -23,6 +23,9 @@ pub fn resolve_auto() -> &'static str {
             if name.starts_with("uk") {
                 return "uk";
             }
+            if name.starts_with("pt") {
+                return "pt";
+            }
         }
     }
     "en"
@@ -94,6 +97,7 @@ pub fn tr(lang: &str, key: &str) -> &'static str {
         ("ko", "open_data") => "데이터 폴더 열기 (로그 / 아이콘)",
         ("ru", "open_data") => "Открыть папку данных (журналы / значки)",
         ("uk", "open_data") => "Відкрити теку даних (журнали / значки)",
+        ("pt", "open_data") => "Abrir pasta de dados (logs / ícones)",
         (_, "open_data") => "Open data folder (logs / icons)",
         ("ja", "refresh_all") => "すべて更新",
         ("ko", "refresh_all") => "모두 새로 고침",
@@ -129,6 +133,15 @@ pub fn tr(lang: &str, key: &str) -> &'static str {
         ("uk", "autostart") => "Запускати разом із Windows (у фоні)",
         ("ru", "refresh_all") => "Обновить всё",
         ("uk", "refresh_all") => "Оновити все",
+        ("pt", "install") => "Instalar hooks do Claude Code",
+        ("pt", "uninstall") => "Remover hooks",
+        ("pt", "language") => "Idioma",
+        ("pt", "lang_auto") => "Seguir o sistema",
+        ("pt", "reset_pos") => "Redefinir posição da barra",
+        ("pt", "quit") => "Sair",
+        ("pt", "hooks_missing") => "Hooks não instalados: clique com o botão direito na bandeja → Instalar hooks do Claude Code (o app de desktop já tem um substituto automático)",
+        ("pt", "autostart") => "Iniciar com o Windows (em segundo plano)",
+        ("pt", "refresh_all") => "Atualizar tudo",
         (_, "install") => "Install Claude Code hooks",
         (_, "uninstall") => "Uninstall hooks",
         (_, "language") => "Language",
@@ -144,6 +157,7 @@ pub fn tr(lang: &str, key: &str) -> &'static str {
         ("ko", "waiting") => "첫 번째 읽기를 기다리는 중…",
         ("ru", "waiting") => "Ожидание первых данных…",
         ("uk", "waiting") => "Очікування першого показника…",
+        ("pt", "waiting") => "Aguardando a primeira leitura…",
         (_, "waiting") => "Waiting for the first reading…",
 
         ("zh", "quit_app") => "退出 Codenotch",
@@ -151,13 +165,23 @@ pub fn tr(lang: &str, key: &str) -> &'static str {
         ("ko", "quit_app") => "Codenotch 종료",
         ("ru", "quit_app") => "Выйти из Codenotch",
         ("uk", "quit_app") => "Вийти з Codenotch",
+        ("pt", "quit_app") => "Sair do Codenotch",
         (_, "quit_app") => "Quit Codenotch",
         ("zh", "settings") => "设置…",
         ("ja", "settings") => "設定…",
         ("ko", "settings") => "설정…",
         ("ru", "settings") => "Настройки…",
         ("uk", "settings") => "Налаштування…",
+        ("pt", "settings") => "Configurações…",
         (_, "settings") => "Settings…",
+
+        ("zh", "speedtest") => "测试网速",
+        ("ja", "speedtest") => "インターネット速度を測定",
+        ("ko", "speedtest") => "인터넷 속도 테스트",
+        ("ru", "speedtest") => "Проверить скорость интернета",
+        ("uk", "speedtest") => "Перевірити швидкість інтернету",
+        ("pt", "speedtest") => "Testar velocidade da internet",
+        (_, "speedtest") => "Test internet speed",
 
 
 
@@ -186,6 +210,7 @@ mod tests {
         ("hooks_missing", "Хуки не установлены: нажмите правой кнопкой по значку в трее → Установить хуки Claude Code (для настольной версии используется автоматический резервный режим)"),
         ("autostart", "Запускать с Windows (в фоне)"),
         ("open_data", "Открыть папку данных (журналы / значки)"),
+        ("speedtest", "Проверить скорость интернета"),
     ];
 
     #[test]
@@ -214,6 +239,7 @@ mod tests {
         ("waiting", "Очікування першого показника…"),
         ("quit_app", "Вийти з Codenotch"),
         ("settings", "Налаштування…"),
+        ("speedtest", "Перевірити швидкість інтернету"),
     ];
 
     #[test]
@@ -225,6 +251,31 @@ mod tests {
                 "missing Ukrainian translation for {key}"
             );
             assert_ne!(tr("uk", key), "?", "unknown Ukrainian key {key}");
+        }
+    }
+
+    const PORTUGUESE_KEYS: &[(&str, &str)] = &[
+        ("settings", "Configurações…"),
+        ("refresh_all", "Atualizar tudo"),
+        ("waiting", "Aguardando a primeira leitura…"),
+        ("quit_app", "Sair do Codenotch"),
+        ("quit", "Sair"),
+        ("install", "Instalar hooks do Claude Code"),
+        ("uninstall", "Remover hooks"),
+        ("language", "Idioma"),
+        ("lang_auto", "Seguir o sistema"),
+        ("reset_pos", "Redefinir posição da barra"),
+        ("hooks_missing", "Hooks não instalados: clique com o botão direito na bandeja → Instalar hooks do Claude Code (o app de desktop já tem um substituto automático)"),
+        ("autostart", "Iniciar com o Windows (em segundo plano)"),
+        ("open_data", "Abrir pasta de dados (logs / ícones)"),
+        ("speedtest", "Testar velocidade da internet"),
+    ];
+
+    #[test]
+    fn portuguese_translates_every_known_key() {
+        for (key, value) in PORTUGUESE_KEYS {
+            assert_eq!(tr("pt", key), *value, "missing Portuguese translation for {key}");
+            assert_ne!(tr("pt", key), "?", "unknown Portuguese key {key}");
         }
     }
 

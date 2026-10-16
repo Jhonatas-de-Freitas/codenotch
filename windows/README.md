@@ -33,6 +33,31 @@ Restart Codenotch after installing or removing `agy`: the source is selected at 
 The CLI's text report is parsed defensively; an unsupported format or failed sign-in
 shows an error or the last reading marked stale. Codenotch does not automate sign-in.
 
+### System
+
+Under the provider rings (after them, on the top and bottom edges) the notch carries a small **System** block: how busy
+the processor is, how much memory is in use, the system drive (space used and how busy it is) and the live internet speed.
+Hover it for a card with the details and a 60-second graph of each reading; click it to open Task Manager.
+**Settings → Appearance → System** switches each row on or off; with all four off the block, and the sampler behind it, go away.
+The sampler also stops while the notch itself is hidden.
+
+| Row | Where the number comes from |
+|---|---|
+| **CPU** | `% Processor Utility` through PDH (the English counter path, so it works in any Windows language), as a share of the highest utility this CPU reaches (220 % to start with, raised if it clocks higher). That is how Task Manager on Windows 11 reports CPU: a share of the machine's maximum capacity, not plain busy time, which on a turbo laptop reads far higher (checked on an i7-1355U, Task Manager ≈ utility / 2.2 within about 6 points). Plain busy time from `GetSystemTimes` stands in where the counter is missing. The card adds the model and the thread count. |
+| **RAM** | `GlobalMemoryStatusEx`: physical memory in use, Task Manager's "In use". |
+| **SSD / HDD** | `GetDiskFreeSpaceExW` for the system drive (the card also lists other fixed drives), plus the volume's own performance counters (`IOCTL_DISK_PERFORMANCE`, no administrator needed; the `\PhysicalDisk` counters through PDH when Windows refuses) for the active time and the read and write speed. The label follows what Windows says the drive is. |
+| **Internet** | `GetIfTable2Ex` and `GetIfEntry2`: bytes in and out of the physical adapters that are up, per second, shown in bits (Kb/s, Mb/s, Gb/s). Virtual adapters (Hyper-V, VirtualBox, VPN) are left out, so the same traffic is never counted twice. |
+
+How busy the processor and the disk are swing with the load from one second to the next, so the notch shows them as a short moving average (about two seconds); space, memory and the speeds are shown as measured. `codenotch.exe sysmon` prints the raw per-second values.
+
+Nothing in the block touches the network except the speed test, and that runs **only when you ask**: **Test now** on the
+card, **Test internet speed** in the tray menu, the button in Settings, or `codenotch.exe speedtest` on a console. It talks to
+Cloudflare's public speed-test servers (`speed.cloudflare.com`), sends nothing but test data and a plain user agent, moves up to
+about 500 MB (400 MB down, 100 MB up) and keeps the last result in `speedtest.json` in the data folder.
+
+`codenotch.exe sysmon [seconds]` prints the same readings on the console, one line a second, for checking them against Task Manager.
+`sys_metrics` in `config.json` holds the rows that are on (any of `cpu`, `ram`, `disk`, `net`); missing means all four, `[]` means none.
+
 ## Install / build
 
 Download [`Codenotch-Setup.exe`](https://github.com/vinzdg/codenotch/releases/latest/download/Codenotch-Setup.exe)
@@ -61,7 +86,7 @@ npx @tauri-apps/cli@2 build --config tauri.bundle.conf.json
 ```
 
 Tray menu: the readings themselves — a line per provider with its headline figure, and under it
-one line per limit window — then **Refresh all**, **Settings…** and **Quit Codenotch**. Clicking a
+one line per limit window — then **Refresh all**, **Test internet speed**, **Settings…** and **Quit Codenotch**. Clicking a
 provider's line re-reads that provider. Everything else is in the settings window: which rings the
 notch shows, its size, the weekly ring, which screen edge it sits on and which screen,
 start with Windows, the language, Claude Code hooks, reset

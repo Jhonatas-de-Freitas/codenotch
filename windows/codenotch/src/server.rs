@@ -6,7 +6,7 @@ use crate::AppState;
 use std::io::Read;
 use tauri::{AppHandle, Manager};
 
-pub fn start(app: AppHandle, port: u16) {
+pub fn start(app: AppHandle, port: u16, secret: String) {
     std::thread::spawn(move || {
         let server = match tiny_http::Server::http(("127.0.0.1", port)) {
             Ok(s) => s,
@@ -29,6 +29,14 @@ pub fn start(app: AppHandle, port: u16) {
                 // Cross-Origin / CSRF protection:
                 // Reject untrusted browser requests attempting to forge events or poison local state.
                 if is_forbidden(&req) {
+                    let _ = req.respond(
+                        tiny_http::Response::from_string("forbidden").with_status_code(403),
+                    );
+                    continue;
+                }
+                // Per-install secret: tells a real codenotch-hook apart from anything else on this
+                // machine that happens to be poking the same loopback port.
+                if !has_valid_secret(req.headers(), &secret) {
                     let _ = req.respond(
                         tiny_http::Response::from_string("forbidden").with_status_code(403),
                     );
@@ -190,6 +198,14 @@ pub(crate) fn is_allowed_origin(origin: &str) -> bool {
     host.eq_ignore_ascii_case("127.0.0.1")
         || host.eq_ignore_ascii_case("localhost")
         || host == "[::1]"
+}
+
+const SECRET_HEADER: &str = "X-Codenotch-Secret";
+
+pub(crate) fn has_valid_secret(headers: &[tiny_http::Header], expected: &str) -> bool {
+    headers
+        .iter()
+        .any(|h| h.field.equiv(SECRET_HEADER) && h.value.as_str() == expected)
 }
 
 #[cfg(test)]
@@ -366,5 +382,23 @@ mod tests {
         assert_eq!(resp.status(), 200);
 
         handle.join().unwrap();
+    }
+
+    #[test]
+    fn has_valid_secret_accepts_the_matching_header() {
+        let headers = [tiny_http::Header::from_bytes(&b"X-Codenotch-Secret"[..], &b"topsecret"[..]).unwrap()];
+        assert!(has_valid_secret(&headers, "topsecret"));
+    }
+
+    #[test]
+    fn has_valid_secret_rejects_a_wrong_value() {
+        let headers = [tiny_http::Header::from_bytes(&b"X-Codenotch-Secret"[..], &b"wrong"[..]).unwrap()];
+        assert!(!has_valid_secret(&headers, "topsecret"));
+    }
+
+    #[test]
+    fn has_valid_secret_rejects_a_missing_header() {
+        let headers: [tiny_http::Header; 0] = [];
+        assert!(!has_valid_secret(&headers, "topsecret"));
     }
 }

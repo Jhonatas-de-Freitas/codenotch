@@ -1,0 +1,73 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  :root{--bg:#1e1f22;--fg:#f3f4f6;--dim:#8d939b;--track:#34373c;--ok:#34c47c;--warn:#e8aa22;--hot:#f0802a;--max:#ef4f55}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:13px/1.2 "Segoe UI Variable Text","Segoe UI",sans-serif;overflow:hidden;user-select:none}
+  #box{padding:16px 18px 4px;box-sizing:border-box}
+  .p{margin-bottom:12px}
+  .p.old{opacity:.5}
+  .head{height:32px;display:flex;align-items:center;gap:9px;border-bottom:1px solid #2c2e33;box-sizing:border-box;padding-bottom:6px;margin-bottom:0}
+  .dot{width:9px;height:9px;border-radius:50%}
+  .name{font-weight:600;font-size:14px;letter-spacing:.2px}
+  .tag{color:var(--dim);font-size:11px;margin-left:auto}
+  .w{height:52px;padding-top:8px;box-sizing:border-box}
+  .top{display:flex;justify-content:space-between;align-items:baseline;height:18px}
+  .lab{color:#d5d8dc}
+  .val{font-weight:600;font-variant-numeric:tabular-nums}
+  .bar{height:6px;border-radius:3px;background:var(--track);overflow:hidden;margin-top:5px}
+  .bar i{display:block;height:100%;border-radius:3px}
+  .bot{display:flex;justify-content:space-between;height:16px;margin-top:4px;color:var(--dim);font-size:11.5px}
+  .ic{color:#7aa7ff}
+  .c{height:24px;display:flex;justify-content:space-between;align-items:center;color:#d5d8dc}
+  .c span:last-child{color:var(--dim)}
+  .note{height:22px;color:var(--dim);display:flex;align-items:center}
+</style>
+<div id="box"></div>
+<script>
+  const box=document.getElementById('box');
+  const BRAND={claude:'#d97757',codex:'#19c37d',cursor:'#9aa0a6',grok:'#c7c7c7',gemini:'#5b8def'};
+  const LABELS={'Current session':'Sessão atual','Weekly (all models)':'Semana · todos os modelos','Weekly (model-scoped)':'Semana · por modelo','Weekly (Opus)':'Semana · Opus','Weekly limit':'Semana','Weekly Limit':'Semana','5h limit':'Janela de 5 horas','5-hour Limit':'Janela de 5 horas','5-Hour Limit':'Janela de 5 horas','Monthly limit':'Mês','Monthly Limit':'Mês','Requests today':'Pedidos hoje'};
+  const color=f=>f>=.9?'var(--max)':f>=.75?'var(--hot)':f>=.5?'var(--warn)':'var(--ok)';
+  const pc=f=>{const v=f*100;return v>0&&v<1?'<1':Math.round(v)+''};
+  function span(ms){
+    const m=Math.max(1,Math.round(ms/60000)),h=Math.floor(m/60),d=Math.floor(h/24);
+    if(m<60)return m+' min';
+    if(h<24)return h+'h '+String(m%60).padStart(2,'0')+'min';
+    return d+(d===1?' dia ':' dias ')+(h%24)+'h';
+  }
+  const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
+  window.__TAURI__.event.listen('hover_data',ev=>{
+    const {now,providers}=ev.payload;
+    box.textContent='';
+    if(!providers.length){box.appendChild(el('div','note','Aguardando leitura…'));return;}
+    for(const p of providers){
+      const old=p.stale_ms&&p.stale_ms>24*3600*1000;
+      const wrap=el('div','p'+(old?' old':''));
+      const head=el('div','head');
+      const dot=el('span','dot');dot.style.background=BRAND[p.id]||'#888';head.appendChild(dot);
+      head.appendChild(el('span','name',p.name));
+      if(p.stale_ms&&p.stale_ms>=60000)head.appendChild(el('span','tag','última leitura há '+span(p.stale_ms)));
+      wrap.appendChild(head);
+      for(const w of p.windows){
+        const label=LABELS[w.label]||w.label;
+        if(w.count!=null){
+          const c=el('div','c');c.appendChild(el('span',null,label));c.appendChild(el('span',null,'~'+w.count));wrap.appendChild(c);continue;
+        }
+        const cell=el('div','w');
+        const top=el('div','top');
+        top.appendChild(el('span','lab',label));
+        const val=el('span','val',(w.derived?'~':'')+pc(w.used)+'%');val.style.color=color(w.used);
+        top.appendChild(val);
+        const bar=el('div','bar'),fill=el('i');
+        fill.style.width=Math.max(w.used>0?2:0,w.used*100)+'%';fill.style.background=color(w.used);
+        bar.appendChild(fill);
+        const bot=el('div','bot');
+        bot.appendChild(el('span',null,w.resets_at?(w.resets_at>now?'renova em '+span(w.resets_at-now):'renovando…'):''));
+        if(w.on_icon)bot.appendChild(el('span','ic','● mostrado no ícone'));
+        cell.appendChild(top);cell.appendChild(bar);cell.appendChild(bot);wrap.appendChild(cell);
+      }
+      if(!p.windows.length&&p.note)wrap.appendChild(el('div','note',p.note));
+      box.appendChild(wrap);
+    }
+  });
+</script>

@@ -16,6 +16,9 @@ pub fn snap_scale(scale: f64) -> f64 {
     }
 }
 
+/// The rows of the notch's System block, in the order the notch draws them.
+pub const SYS_METRICS: [&str; 4] = ["cpu", "ram", "disk", "net"];
+
 /// One ring on the notch: which provider. (A `window` key from older builds is ignored.)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TraySlot {
@@ -26,7 +29,11 @@ pub struct TraySlot {
 pub struct Config {
     #[serde(default = "default_port")]
     pub port: u16,
-    /// "auto" | "zh" | "en" | "ja" | "ko" | "ru" | "uk"
+    /// Per-install random value codenotch-hook sends back on every event, so the local server can
+    /// tell a real hook from another program that happens to be poking the same loopback port.
+    #[serde(default = "random_secret")]
+    pub secret: String,
+    /// "auto" | "zh" | "en" | "pt" | "ja" | "ko" | "ru" | "uk"
     #[serde(default = "default_lang")]
     pub lang: String,
     #[serde(default)]
@@ -76,10 +83,18 @@ pub struct Config {
     /// false = the pill is kept off the screen edge entirely; the tray icon is then the only way in
     #[serde(default = "yes")]
     pub notch_visible: bool,
+    /// What the tray icon's number reads: claude_week, claude_session, codex_week, codex_5h or max
+    #[serde(default = "default_tray_icon")]
+    pub tray_icon: String,
     /// false = the tray icon is hidden. Refused while the notch is also hidden, because that would
     /// leave the app running with no way to reach it.
     #[serde(default = "yes")]
     pub tray_visible: bool,
+    /// Which rows of the System block the notch shows: any of `SYS_METRICS`. All of them unless the
+    /// file says otherwise, so a config written before the block existed gets it the first time it
+    /// runs a build that has it. An empty list hides the block, and the sampler stops with it.
+    #[serde(default = "default_sys_metrics")]
+    pub sys_metrics: Vec<String>,
 }
 
 fn default_notch_y() -> f64 {
@@ -124,6 +139,19 @@ pub fn weekly_ring_or_off(value: &str) -> String {
 fn yes() -> bool {
     true
 }
+fn default_sys_metrics() -> Vec<String> {
+    SYS_METRICS.iter().map(|m| m.to_string()).collect()
+}
+
+/// Unknown ids are dropped and the rest come back once each, in the notch's own order: a hand-edited
+/// file, or a page sending garbage, cannot put a row on screen that the notch has no drawing for.
+pub fn clean_sys_metrics(list: &[String]) -> Vec<String> {
+    SYS_METRICS
+        .iter()
+        .filter(|m| list.iter().any(|l| l == *m))
+        .map(|m| m.to_string())
+        .collect()
+}
 fn default_antigravity_limit() -> String {
     "automatic".into()
 }
@@ -138,10 +166,32 @@ fn default_lang() -> String {
     "auto".into()
 }
 
+#[cfg(windows)]
+fn random_secret() -> String {
+    use windows::Win32::Security::Cryptography::{BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG};
+    let mut bytes = [0u8; 24];
+    let ok = unsafe { BCryptGenRandom(None, &mut bytes, BCRYPT_USE_SYSTEM_PREFERRED_RNG) }.is_ok();
+    if !ok {
+        // BCryptGenRandom failing is effectively unheard-of on a real Windows install; this only
+        // keeps a first run from crashing rather than claiming the same strength as the OS RNG.
+        let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+        let pid = std::process::id() as u128;
+        for (i, b) in bytes.iter_mut().enumerate() {
+            *b = (t.wrapping_add(pid).rotate_left(i as u32 * 7) >> ((i % 8) * 8)) as u8;
+        }
+    }
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+#[cfg(not(windows))]
+fn random_secret() -> String {
+    "0".repeat(48)
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
             port: default_port(),
+            secret: random_secret(),
             lang: default_lang(),
             bar_x: None,
             bar_y: None,
@@ -157,9 +207,15 @@ impl Default for Config {
             antigravity_limit: default_antigravity_limit(),
             antigravity_model: default_antigravity_model(),
             notch_visible: true,
+            tray_icon: default_tray_icon(),
             tray_visible: true,
+            sys_metrics: default_sys_metrics(),
         }
     }
+}
+
+fn default_tray_icon() -> String {
+    "all4".into()
 }
 
 pub fn config_path() -> PathBuf {
@@ -195,6 +251,7 @@ pub fn load() -> Config {
     // The old slider's 40–100 %, or a hand-edited file, lands on one of the three sizes
     cfg.scale = snap_scale(cfg.scale);
     cfg.weekly_ring = weekly_ring_or_off(&cfg.weekly_ring);
+    cfg.sys_metrics = clean_sys_metrics(&cfg.sys_metrics);
     cfg
 }
 
@@ -210,7 +267,11 @@ pub fn save(cfg: &Config) {
 
 #[cfg(test)]
 mod tests {
-    use super::{snap_scale, weekly_ring_or_off};
+    use super::{clean_sys_metrics, random_secret, snap_scale, weekly_ring_or_off, Config};
+
+    fn ids(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
 
     #[test]
     fn a_saved_scale_snaps_to_the_nearest_size() {
@@ -228,5 +289,43 @@ mod tests {
         assert_eq!(weekly_ring_or_off("outside"), "outside");
         assert_eq!(weekly_ring_or_off("Inside"), "off");
         assert_eq!(weekly_ring_or_off(""), "off");
+    }
+
+    #[test]
+    fn random_secret_is_a_48_char_hex_string() {
+        let s = random_secret();
+        assert_eq!(s.len(), 48);
+        assert!(s.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn random_secret_differs_between_calls() {
+        assert_ne!(random_secret(), random_secret());
+    }
+
+    #[test]
+    fn a_default_config_has_a_nonempty_secret() {
+        assert!(!Config::default().secret.is_empty());
+    }
+
+    #[test]
+    fn a_config_from_before_the_system_block_shows_every_row() {
+        let cfg: Config = serde_json::from_str(r#"{"port":48666}"#).unwrap();
+        assert_eq!(cfg.sys_metrics, ids(&["cpu", "ram", "disk", "net"]));
+        assert_eq!(Config::default().sys_metrics, cfg.sys_metrics);
+    }
+
+    #[test]
+    fn an_empty_list_is_a_choice_and_stays_empty() {
+        let cfg: Config = serde_json::from_str(r#"{"sys_metrics":[]}"#).unwrap();
+        assert!(cfg.sys_metrics.is_empty());
+    }
+
+    #[test]
+    fn system_rows_are_deduplicated_ordered_and_stripped_of_strangers() {
+        assert_eq!(clean_sys_metrics(&ids(&["net", "cpu", "net", "gpu", ""])), ids(&["cpu", "net"]));
+        assert_eq!(clean_sys_metrics(&ids(&["disk", "ram", "cpu", "net"])), ids(&["cpu", "ram", "disk", "net"]));
+        assert!(clean_sys_metrics(&ids(&["CPU", "gpu"])).is_empty());
+        assert!(clean_sys_metrics(&[]).is_empty());
     }
 }

@@ -8,6 +8,8 @@ mod hooks_install;
 mod i18n;
 mod server;
 mod state;
+mod alerts;
+mod gauge;
 mod tray;
 mod traymenu;
 mod usage;
@@ -22,6 +24,8 @@ mod activity;
 mod diag;
 mod watcher;
 mod settings_window;
+mod sysmon;
+mod speedtest;
 
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
@@ -30,8 +34,11 @@ use tauri::{AppHandle, Emitter, Manager};
 /// and its tail on the left. `fitZoom` in ui/notch.html divides by the same width.
 pub const NOTCH_W: f64 = 360.0;
 /// Hand-bumped build tag, written to run.log at startup so a log can always be matched to the exe that wrote it.
-pub const BUILD: &str = "r31";
-pub const NOTCH_H: f64 = 520.0; // 300 clipped the card once it held three window blocks plus the session list; 460 clipped Antigravity's two model groups once the reading was stale and an agent was working
+pub const BUILD: &str = "r32";
+pub const NOTCH_H: f64 = 800.0; // 300 clipped the card once it held three window blocks plus the session list; 460 clipped Antigravity's two model groups once the reading was stale and an agent was working; 520 clipped the pill once the System block sat under a fourth provider, and five providers with it measure 757 (785 with a weekly line on every cell) — the window is transparent and click-through outside the pill and card, so the room costs nothing
+/// Width of the flat (top and bottom) notch window: five provider rings and the System block's row
+/// side by side. `fitZoom` in ui/notch.html divides by the same width on those edges.
+pub const FLAT_W: f64 = 720.0;
 
 pub struct AppState {
     pub store: Mutex<state::Store>,
@@ -159,13 +166,25 @@ fn edge_origin(s: &Screen, edge: &str, ww: i32, wh: i32, ratio: f64) -> (i32, i3
 ///
 /// Upright on the left and right, the pill is a column and 360 wide is plenty. Lying flat on the
 /// top and bottom it is a row: five 56 px rings, their gaps, the padding and both fillets already
-/// come to about 424 px, so a 360 px window clipped the pill once a fifth provider was on. The
-/// flat window keeps the full height too, for the hover card that opens below or above the pill.
+/// come to about 424 px, so a 360 px window clipped the pill once a fifth provider was on, and the
+/// System block's row adds a few hundred more, so the flat window is `FLAT_W` wide. It keeps the
+/// full height too, for the hover card that opens below or above the pill.
 pub fn notch_window_size(edge: &str) -> (f64, f64) {
     if config::edge_is_vertical(edge) {
         (NOTCH_W, NOTCH_H)
     } else {
-        (NOTCH_H, NOTCH_H)
+        (FLAT_W, NOTCH_H)
+    }
+}
+
+/// The window is never taller than the screen it stands on: on a short one (1080p at 150 %, or the
+/// Large size) `NOTCH_H` would push the foot of the pill and of the card off it. `scale` is everything
+/// the logical size is multiplied by on its way to pixels, the monitor's scale times the chosen size.
+fn fit_height(tall: f64, screen_px: i32, scale: f64) -> f64 {
+    if scale > 0.0 && screen_px > 0 {
+        tall.min((screen_px as f64 / scale).floor())
+    } else {
+        tall
     }
 }
 
@@ -188,7 +207,8 @@ pub fn place_notch(app: &AppHandle) {
             let c = st.cfg.lock().unwrap();
             config::edge_or_right(&c.notch_edge)
         };
-        let (width, height) = notch_window_size(&edge);
+        let (width, tall) = notch_window_size(&edge);
+        let height = fit_height(tall, mon.h, ms * size);
         let target = tauri::PhysicalSize::new((width * ms * size).round() as u32, (height * ms * size).round() as u32);
         let _ = w.set_size(target);
         zoom_notch(&w, ms, size);
@@ -446,10 +466,13 @@ fn get_codex(state: tauri::State<AppState>) -> usage::UsageSnapshot {
     state.codex.lock().unwrap().clone()
 }
 
-/// A click on a cell opens that provider's usage page
+/// A click on a cell opens that provider's usage page; on the System block it opens Task Manager,
+/// the tool Windows already has for those numbers. Through `start`, like the pages, so the shell
+/// deals with whatever Task Manager's manifest asks for.
 #[tauri::command]
 fn open_provider_page(provider: String) {
-    let url = match provider.as_str() {
+    let target = match provider.as_str() {
+        "system" => "taskmgr",
         "codex" => "https://chatgpt.com/#settings/Account",
         "cursor" => "https://cursor.com/dashboard",
         "grok" => "https://grok.com/?_s=usage",
@@ -457,13 +480,83 @@ fn open_provider_page(provider: String) {
         _ => "https://claude.ai/settings/usage",
     };
     let mut cmd = std::process::Command::new("cmd");
-    cmd.args(["/C", "start", "", url]);
+    cmd.args(["/C", "start", "", target]);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000);
     }
     let _ = cmd.spawn();
+}
+
+// ---------------- the System block ----------------
+
+#[tauri::command]
+fn get_sysmon() -> sysmon::SysSnapshot {
+    sysmon::latest()
+}
+
+#[tauri::command]
+fn get_sys_metrics(app: AppHandle) -> Vec<String> {
+    let st = app.state::<AppState>();
+    let c = st.cfg.lock().unwrap();
+    c.sys_metrics.clone()
+}
+
+/// Unknown ids are dropped rather than stored, and an empty list is allowed: it hides the block.
+/// The notch draws its own rows, so it is told.
+#[tauri::command]
+fn set_sys_metrics(app: AppHandle, metrics: Vec<String>) -> Vec<String> {
+    let value = {
+        let st = app.state::<AppState>();
+        let mut c = st.cfg.lock().unwrap();
+        c.sys_metrics = config::clean_sys_metrics(&metrics);
+        config::save(&c);
+        c.sys_metrics.clone()
+    };
+    let _ = app.emit("sys_metrics", &value);
+    value
+}
+
+#[tauri::command]
+fn get_speedtest() -> speedtest::SpeedState {
+    speedtest::state()
+}
+
+#[tauri::command]
+fn run_speedtest(app: AppHandle) -> bool {
+    start_speedtest(&app)
+}
+
+/// Starts a speed test unless one is already running; the tray item and the pages share this.
+/// It only ever runs because somebody asked for it — nothing schedules one.
+pub fn start_speedtest(app: &AppHandle) -> bool {
+    let handle = app.clone();
+    speedtest::start(move |state| {
+        let _ = handle.emit("speedtest", state);
+    })
+}
+
+/// Where the last speed test is kept, next to the rest of what Codenotch remembers.
+fn speedtest_store() -> std::path::PathBuf {
+    config::config_path().with_file_name("speedtest.json")
+}
+
+/// The sampler behind the System block. It runs only while there is something to show it on, so a
+/// hidden notch, or no rows chosen, costs nothing.
+fn start_sysmon(app: AppHandle) {
+    let gate = app.clone();
+    sysmon::spawn(
+        move || {
+            let st = gate.state::<AppState>();
+            // Poison-proof: a panic here would end the sampler thread for good, and nothing restarts it
+            let c = st.cfg.lock().unwrap_or_else(|e| e.into_inner());
+            c.notch_visible && !c.sys_metrics.is_empty()
+        },
+        move |snap| {
+            let _ = app.emit("sysmon", snap);
+        },
+    );
 }
 
 /// Hot rectangles in **physical pixels**, window-relative, as x,y,w,h: the pill, plus the card
@@ -1245,8 +1338,31 @@ fn report(r: Result<String, String>) {
     let _ = std::fs::write(log, &msg);
 }
 
+/// `codenotch.exe speedtest`: one run with its progress on the console, through the same code the
+/// notch's button runs. The result is kept like any other, so the notch shows it next time it looks.
+fn speedtest_console() -> String {
+    speedtest::init(speedtest_store());
+    let phase = std::cell::RefCell::new(String::new());
+    let show = |s: &speedtest::SpeedState| {
+        if s.state == "running" && *phase.borrow() != s.phase {
+            *phase.borrow_mut() = s.phase.clone();
+            println!("{} ...", s.phase);
+        }
+    };
+    match speedtest::run_blocking(&show) {
+        Ok(r) => format!(
+            "download {:.1} Mbps · upload {:.1} Mbps · latency {:.1} ms ({})",
+            r.down_bits_s / 1e6,
+            r.up_bits_s / 1e6,
+            r.latency_ms,
+            r.server
+        ),
+        Err(e) => format!("FAILED: {e}"),
+    }
+}
+
 /// The subcommands that print to the parent console; only those may attach to it.
-const CONSOLE_CMDS: [&str; 4] = ["install-hooks", "uninstall-hooks", "autostart", "doctor"];
+const CONSOLE_CMDS: [&str; 6] = ["install-hooks", "uninstall-hooks", "autostart", "doctor", "sysmon", "speedtest"];
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -1283,12 +1399,23 @@ fn main() {
                 let _ = std::fs::write(log, &out);
                 return;
             }
+            "sysmon" => {
+                // Seconds to watch, one sample each: five is enough to see every row move
+                let secs = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(5);
+                println!("{}", sysmon::probe(secs));
+                return;
+            }
+            "speedtest" => {
+                println!("{}", speedtest_console());
+                return;
+            }
             _ => {}
         }
     }
 
     let cfg = config::load();
     let port = cfg.port;
+    let secret = cfg.secret.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -1352,6 +1479,11 @@ fn main() {
             get_monitors,
             set_notch_monitor,
             open_settings,
+            get_sysmon,
+            get_sys_metrics,
+            set_sys_metrics,
+            get_speedtest,
+            run_speedtest,
             settings_window::get_system_look,
             settings_window::quit_app,
             settings_window::open_author_page
@@ -1363,10 +1495,15 @@ fn main() {
                 let _ = w.show();
             }
             tray::setup(&handle)?;
+            tray::build_hover(&handle);
+            tray::start_icon_rotation(handle.clone());
+            tray::start_icon_blink(handle.clone());
+            autostart::refresh_copy();
             start_menu_updater(handle.clone());
+            alerts::start(handle.clone());
             // Honours the saved switches: a notch hidden last time stays hidden.
             apply_visibility(&handle);
-            server::start(handle.clone(), port);
+            server::start(handle.clone(), port, secret.clone());
             watcher::start(handle.clone());
             usage::start(handle.clone());
             codex::start(handle.clone());
@@ -1374,6 +1511,8 @@ fn main() {
             grok::start(handle.clone());
             antigravity::start(handle.clone());
             activity::start(handle.clone());
+            speedtest::init(speedtest_store());
+            start_sysmon(handle.clone());
             // Collecting glyphs may read icon resources out of a few executables; do it off the main thread and push when done
             let gh = handle.clone();
             std::thread::spawn(move || reload_glyphs(&gh));
@@ -1416,7 +1555,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{cursor_in_hot, notch_window_size, ring_window, HOT_PAD, NOTCH_H, NOTCH_W};
+    use super::{cursor_in_hot, fit_height, notch_window_size, ring_window, HOT_PAD, NOTCH_H, NOTCH_W};
     use crate::usage::LimitWindow;
 
     #[test]
@@ -1430,6 +1569,37 @@ mod tests {
         }
         for edge in ["left", "right"] {
             assert_eq!(notch_window_size(edge), (NOTCH_W, NOTCH_H));
+        }
+    }
+
+    #[test]
+    fn the_window_never_outgrows_a_short_screen() {
+        // A 1080 px panel at 125 % (a laptop): 800 logical px are 1000 physical, so nothing changes
+        assert_eq!(fit_height(NOTCH_H, 1080, 1.25), NOTCH_H);
+        // The Large size on it is 1.25 × 1.25: the window takes the screen's height instead
+        assert_eq!(fit_height(NOTCH_H, 1080, 1.25 * 1.25), 691.0);
+        // 1080p at 150 %: 720 logical px of screen
+        assert_eq!(fit_height(NOTCH_H, 1080, 1.5), 720.0);
+        // A scale or a height that cannot be read leaves the designed height alone
+        assert_eq!(fit_height(NOTCH_H, 1080, 0.0), NOTCH_H);
+        assert_eq!(fit_height(NOTCH_H, 0, 1.0), NOTCH_H);
+    }
+
+    /// Measured on the real page (ui/notch.html) with five providers, a weekly line under every ring
+    /// and the whole System block: 733 px tall upright, 526 px wide lying flat, plus a 26 px fillet
+    /// at each end. The tallest hover card is 573 px and opens 30 px clear of a 125 px thick flat pill.
+    #[test]
+    fn the_windows_hold_five_providers_and_the_system_block() {
+        let (upright, flat) = (733.0 + 2.0 * 26.0, 526.0 + 2.0 * 26.0);
+        let flat_card = 125.0 + 30.0 + 573.0 + 8.0;
+        for edge in ["top", "bottom"] {
+            let (w, h) = notch_window_size(edge);
+            assert!(w >= flat, "{edge}: {w} px cannot hold a {flat} px pill with the System block");
+            assert!(h >= flat_card, "{edge}: {h} px clips the tallest hover card ({flat_card} px)");
+        }
+        for edge in ["left", "right"] {
+            let (_, h) = notch_window_size(edge);
+            assert!(h >= upright, "{edge}: {h} px cannot hold a {upright} px pill with the System block");
         }
     }
 

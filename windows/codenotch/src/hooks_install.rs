@@ -33,11 +33,20 @@ fn is_ours(entry: &Value) -> bool {
         .unwrap_or(false)
 }
 
-fn load(path: &PathBuf) -> Value {
-    std::fs::read_to_string(path)
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_else(|| json!({}))
+/// The settings.json content to build on: a fresh `{}` when there is no file yet, or the file's own
+/// content when it parses as a JSON object. Anything else (invalid JSON, or valid JSON that is not
+/// an object) is refused rather than silently replaced, so a stray comma cannot wipe a real settings
+/// file the way defaulting to `{}` used to.
+fn build_updated_settings(existing: Option<&str>) -> Result<Value, String> {
+    let Some(text) = existing else {
+        return Ok(json!({}));
+    };
+    let v: Value = serde_json::from_str(text)
+        .map_err(|e| format!("existing settings.json is not valid JSON, refusing to touch it: {e}"))?;
+    if !v.is_object() {
+        return Err("existing settings.json is not a JSON object, refusing to touch it".into());
+    }
+    Ok(v)
 }
 
 fn backup_and_write(path: &PathBuf, root: &Value) -> Result<(), String> {
@@ -73,10 +82,8 @@ pub fn install() -> Result<String, String> {
         return Err(format!("missing {}", hook_exe.display()));
     }
 
-    let mut root = load(&path);
-    if !root.is_object() {
-        root = json!({});
-    }
+    let existing = std::fs::read_to_string(&path).ok();
+    let mut root = build_updated_settings(existing.as_deref())?;
     if !root["hooks"].is_object() {
         root["hooks"] = json!({});
     }
@@ -105,7 +112,8 @@ pub fn uninstall() -> Result<String, String> {
     if !path.exists() {
         return Ok("settings.json does not exist, nothing to uninstall".into());
     }
-    let mut root = load(&path);
+    let existing = std::fs::read_to_string(&path).ok();
+    let mut root = build_updated_settings(existing.as_deref())?;
     let Some(hooks) = root["hooks"].as_object_mut() else {
         return Ok("no hooks configuration found".into());
     };
@@ -119,4 +127,30 @@ pub fn uninstall() -> Result<String, String> {
     }
     backup_and_write(&path, &root)?;
     Ok(format!("removed {removed} Codenotch hook(s)"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_updated_settings_starts_fresh_when_no_file_exists() {
+        assert_eq!(build_updated_settings(None).unwrap(), json!({}));
+    }
+
+    #[test]
+    fn build_updated_settings_keeps_existing_content() {
+        let v = build_updated_settings(Some(r#"{"env":{"X":"1"}}"#)).unwrap();
+        assert_eq!(v["env"]["X"], "1");
+    }
+
+    #[test]
+    fn build_updated_settings_refuses_invalid_json() {
+        assert!(build_updated_settings(Some("{ not json")).is_err());
+    }
+
+    #[test]
+    fn build_updated_settings_refuses_a_non_object_root() {
+        assert!(build_updated_settings(Some("42")).is_err());
+    }
 }
