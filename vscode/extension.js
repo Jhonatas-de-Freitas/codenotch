@@ -9,7 +9,7 @@ const { spawn, execFile } = require('child_process');
 
 const DIR = path.join(process.env.APPDATA || '', 'codenotch');
 // Ferramentas do Windows sempre pelo caminho absoluto (não pelo PATH/pasta atual): evita rodar um .exe plantado.
-const sys32 = (exe) => path.join(process.env.SystemRoot || 'C:\Windows', 'System32', exe);
+const sys32 = (exe) => path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', exe);
 const NOMES = { claude: 'Claude', codex: 'GPT', antigravity: 'Antigravity', cursor: 'Cursor', grok: 'Grok' };
 const ARQUIVO = { claude: 'usage.json' };
 
