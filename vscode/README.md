@@ -19,10 +19,10 @@ Verde abaixo de 60 %, âmbar de 60 a 79 %, fundo amarelo a partir de 80 %, fundo
 
 ## Instalar
 
-Com o arquivo pronto (`codenotch-vscode-0.3.0.vsix`, nesta pasta):
+Com o arquivo pronto (`codenotch-vscode-0.3.1.vsix`, nesta pasta):
 
 ```
-code --install-extension codenotch-vscode-0.3.0.vsix --force
+code --install-extension codenotch-vscode-0.3.1.vsix --force
 ```
 
 Depois: Ctrl+Shift+P > "Developer: Reload Window".

@@ -8,6 +8,8 @@ const path = require('path');
 const { spawn, execFile } = require('child_process');
 
 const DIR = path.join(process.env.APPDATA || '', 'codenotch');
+// Ferramentas do Windows sempre pelo caminho absoluto (não pelo PATH/pasta atual): evita rodar um .exe plantado.
+const sys32 = (exe) => path.join(process.env.SystemRoot || 'C:\Windows', 'System32', exe);
 const NOMES = { claude: 'Claude', codex: 'GPT', antigravity: 'Antigravity', cursor: 'Cursor', grok: 'Grok' };
 const ARQUIVO = { claude: 'usage.json' };
 
@@ -155,8 +157,8 @@ function atualizaSys() {
 // com teto de metade da RAM. É o mesmo "Memória de GPU" do Gerenciador de Tarefas.
 function leVram() {
   if (parando) return;
-  execFile('typeperf', ['\\GPU Adapter Memory(*)\\Dedicated Usage', '\\GPU Adapter Memory(*)\\Shared Usage', '\\GPU Engine(*)\\Utilization Percentage', '-sc', '1'],
-    { windowsHide: true, timeout: 12000, maxBuffer: 8 * 1024 * 1024 }, (err, out) => {
+  execFile(sys32('typeperf.exe'), ['\\GPU Adapter Memory(*)\\Dedicated Usage', '\\GPU Adapter Memory(*)\\Shared Usage', '\\GPU Engine(*)\\Utilization Percentage', '-sc', '1'],
+    { windowsHide: true, cwd: os.tmpdir(), timeout: 12000, maxBuffer: 8 * 1024 * 1024 }, (err, out) => {
       if (err || !out) return;
       const linhas = out.split(/\r?\n/).filter((l) => l.startsWith('"'));
       if (linhas.length < 2) return;
@@ -270,7 +272,7 @@ let portas = [];
 
 function lePortas() {
   if (parando) return;
-  execFile('netstat', ['-ano', '-p', 'tcp'], { windowsHide: true, timeout: 8000, maxBuffer: 4 * 1024 * 1024 }, (e1, out1) => {
+  execFile(sys32('netstat.exe'), ['-ano', '-p', 'tcp'], { windowsHide: true, cwd: os.tmpdir(), timeout: 8000, maxBuffer: 4 * 1024 * 1024 }, (e1, out1) => {
     if (e1 || !out1) return;
     const cand = new Map(); // porta -> pid
     for (const l of out1.split(/\r?\n/)) {
@@ -283,7 +285,7 @@ function lePortas() {
       if (!cand.has(n)) cand.set(n, +pid);
     }
     if (!cand.size) { portas = []; atualizaPortas(); return; }
-    execFile('tasklist', ['/fo', 'csv', '/nh'], { windowsHide: true, timeout: 8000, maxBuffer: 4 * 1024 * 1024 }, (e2, out2) => {
+    execFile(sys32('tasklist.exe'), ['/fo', 'csv', '/nh'], { windowsHide: true, cwd: os.tmpdir(), timeout: 8000, maxBuffer: 4 * 1024 * 1024 }, (e2, out2) => {
       if (e2 || !out2) return;
       const nomes = new Map();
       for (const l of out2.split(/\r?\n/)) {

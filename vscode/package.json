@@ -2,7 +2,7 @@
   "name": "codenotch-vscode",
   "displayName": "Codenotch na barra de status",
   "description": "Mostra CPU, RAM, disco, internet e o uso das IAs (Claude, Codex, ...) na barra de baixo do VS Code, lendo os dados do Codenotch.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "jhonatas",
   "license": "MIT",
   "repository": { "type": "git", "directory": "vscode", "url": "https://github.com/Jhonatas-de-Freitas/codenotch" },
