@@ -1,0 +1,43 @@
+{
+  "name": "codenotch-vscode",
+  "displayName": "Codenotch na barra de status",
+  "description": "Mostra CPU, RAM, disco, internet e o uso das IAs (Claude, Codex, ...) na barra de baixo do VS Code, lendo os dados do Codenotch.",
+  "version": "0.3.0",
+  "publisher": "jhonatas",
+  "license": "MIT",
+  "repository": { "type": "git", "directory": "vscode", "url": "https://github.com/Jhonatas-de-Freitas/codenotch" },
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": { "supported": "limited", "restrictedConfigurations": ["codenotch.exe"] }
+  },
+  "contributes": {
+    "commands": [
+      { "command": "codenotch.atualizar", "title": "Codenotch: Atualizar agora" },
+      { "command": "codenotch.portas", "title": "Codenotch: Abrir porta de localhost" }
+    ],
+    "configuration": {
+      "title": "Codenotch",
+      "properties": {
+        "codenotch.exe": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Caminho do codenotch.exe. Vazio = %LOCALAPPDATA%\\Programs\\Codenotch\\codenotch.exe"
+        },
+        "codenotch.alertaAmarelo": {
+          "type": "number",
+          "default": 80,
+          "description": "A partir de quantos % o item fica amarelo."
+        },
+        "codenotch.alertaVermelho": {
+          "type": "number",
+          "default": 95,
+          "description": "A partir de quantos % o item fica vermelho."
+        }
+      }
+    }
+  }
+}
