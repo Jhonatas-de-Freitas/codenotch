@@ -16,6 +16,7 @@ const ARQUIVO = { claude: 'usage.json' };
 const VERDE = '#4ade80';
 const AMBAR = '#fbbf24';
 
+const ultimoBom = new Map(); // id -> último texto/máximo lido com dado real
 const itens = new Map(); // chave -> StatusBarItem
 const suave = { cpu: null, busy: null };
 let sys = null;
@@ -210,7 +211,7 @@ function atualizaVram() {
 // ---------- IAs ----------
 function curto(w) {
   const t = `${w.id} ${w.label}`.toLowerCase();
-  if (/scoped|model/.test(t)) return null; // limite por modelo fica só no balão
+  if (/scoped|model-scoped|per-model/.test(t)) return null; // limite por modelo fica só no balão
   if (/primary|five|5h|session|sess/.test(t)) return 'sessão';
   if (/secondary|week|semana/.test(t)) return 'sem';
   return null;
@@ -243,9 +244,13 @@ function atualizaIAs() {
     let maximo = 0;
     if (mostradas.length) {
       const todasZero = mostradas.every((x) => !x.w.used);
-      if (ruim && todasZero) { texto = '?'; } else {
+      if (ruim && todasZero) {
+        const u = ultimoBom.get(id);
+        if (u) { texto = u.texto; maximo = u.maximo; } else { texto = '?'; }
+      } else {
         texto = mostradas.map((x) => `${x.k} ${Math.round(x.w.used * 100)}%`).join(' / ');
         maximo = Math.max(...mostradas.map((x) => x.w.used * 100));
+        if (!todasZero) ultimoBom.set(id, { texto, maximo });
       }
     } else {
       const w = d.windows[0];
