@@ -917,7 +917,7 @@ function drawSeg(id, value, disabled){
 }
 function renderFlags(){
   drawSeg('seg-show', flags.notch ? 'show' : 'hide');
-  drawSeg('seg-tray', flags.tray ? 'tray' : 'none', flags.notch ? [] : ['none']);
+  drawSeg('seg-tray', flags.tray ? 'tray' : 'none', []);
   document.getElementById('cap-show').textContent = flags.notch ? ui(SHOW_WHY, SHOW_WHY) : ui(HIDE_WHY, HIDE_WHY);
   const trayWhy = !flags.notch ? HELD_ON : flags.tray ? TRAY_WHY : NO_TRAY_WHY;
   document.getElementById('cap-tray').textContent = ui(trayWhy, trayWhy);

@@ -1083,7 +1083,7 @@ fn set_ui_flags(app: AppHandle, notch_visible: bool, tray_visible: bool) -> UiFl
         let st = app.state::<AppState>();
         let mut c = st.cfg.lock().unwrap();
         c.notch_visible = notch_visible;
-        c.tray_visible = if notch_visible { tray_visible } else { true };
+        c.tray_visible = tray_visible;
         config::save(&c);
         UiFlags { notch_visible: c.notch_visible, tray_visible: c.tray_visible }
     };

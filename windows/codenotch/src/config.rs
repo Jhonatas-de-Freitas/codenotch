@@ -243,10 +243,8 @@ pub fn load() -> Config {
             .collect();
     }
 
-    // Both hidden would leave the app unreachable: no pill, no tray icon, no way to open settings.
-    if !cfg.notch_visible && !cfg.tray_visible {
-        cfg.tray_visible = true;
-    }
+    // Both hidden is allowed (owner's choice, 10/11/2026): the app keeps running and feeding
+    // %APPDATA%\codenotch\*.json; opening codenotch.exe again brings the settings window back.
 
     // The old slider's 40–100 %, or a hand-edited file, lands on one of the three sizes
     cfg.scale = snap_scale(cfg.scale);
